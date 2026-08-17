@@ -40,6 +40,11 @@ describe("kunci pesan skrip kontrak", () => {
     // Kunci yang memang TIDAK menunjuk artefak, dan alasannya masing-masing: judul bagian laporan,
     // baris pemakaian, dan kalimat penjelas yang menyertai temuan lain yang sudah menunjuk.
     const tanpaArtefak = new Set([
+      // Pemberitahuan LEWATAN, bukan temuan: artefak yang biasanya ia sebut — direktori feature —
+      // adalah persis yang TIDAK ADA di proyek contract-only. Menyuntikkan variabel di sini berarti
+      // mengarang jalur untuk sesuatu yang tak pernah dirakit; kalimatnya justru menyebut kunci
+      // config yang kosong, dan itu satu-satunya "tempat" yang benar untuk ditunjuk.
+      "kontrak.rute.lewat_backend",
       "kontrak.permission.skema_keamanan_hilang", // artefaknya berkas config global, disebut di teks
       "kontrak.penerap.pemakaian",
       "kontrak.penerap.tidak_menulis",

@@ -81,6 +81,40 @@ export type Jalur = {
   sufiksGen(): string;
 };
 
+/**
+ * Pesan tunggal untuk "config ini tidak menyatakan lapis backend".
+ *
+ * DIPAKU di sini, bukan diambil dari katalog, dan itu batasnya: `buatJalur` murni dan sinkron —
+ * ia dipanggil sebelum katalog pesan dimuat di sebagian jalur, dan menjadikannya async akan
+ * merambat ke setiap skrip kontrak. Pemanggil yang punya `t` (mis. `check-routes`) menuliskan
+ * kalimat berbahasa sendiri sebelum menyentuh accessor ini; yang tidak punya tetap mendapat
+ * kalimat yang menyebut sebab DAN jalan keluarnya, bukan `TypeError`.
+ */
+const PESAN_TANPA_BACKEND =
+  "config ini tidak menyatakan lapis backend: `layout.backendDir` tidak diisi, jadi `go.*` tidak " +
+  "wajib dan tidak ada jalur backend yang bisa dirakit. Perintah ini memancarkan (atau memindai) " +
+  "kode Go, jadi ia tidak bisa berjalan di proyek contract-only. Isi `layout.backendDir` beserta " +
+  "blok `go` kalau proyek ini memang punya backend Go.";
+
+/**
+ * Galat yang dipakai seluruh accessor backend saat lapisnya tidak dinyatakan.
+ *
+ * Kelasnya sendiri, bukan `Error` telanjang, supaya pemanggil yang ingin MELEWATI (bukan gagal)
+ * bisa membedakannya dari galat lain — `check-routes` memakainya persis begitu untuk melewati
+ * paruh backend-nya sambil tetap menjalankan paruh kontrak.
+ */
+export class GalatTanpaLapisBackend extends Error {
+  constructor(pesan: string = PESAN_TANPA_BACKEND) {
+    super(pesan);
+    this.name = "GalatTanpaLapisBackend";
+  }
+}
+
+/** Apakah config menyatakan lapis backend sama sekali. Sinyalnya `layout.backendDir` DITULIS. */
+export function adaLapisBackend(config: StandardConfig): boolean {
+  return config.layout.backendDir !== undefined && config.go !== undefined;
+}
+
 export function buatJalur(config: StandardConfig, akar: string): Jalur {
   const kontrak = path.join(akar, config.layout.contractDir);
   const distDir = path.dirname(config.contract.bundle);
@@ -90,6 +124,24 @@ export function buatJalur(config: StandardConfig, akar: string): Jalur {
   // yang membuat `refShared()` di bawah menghasilkan `$ref` yang tidak resolve.
   const dirOpenApi = path.dirname(config.contract.sharedDir);
   const dirFitur = path.join(dirOpenApi, NAMA_DIR_FITUR);
+
+  /**
+   * Penjaga lapis backend — dipanggil ULANG di tiap accessor, bukan dihitung sekali di atas.
+   *
+   * Bukan pemborosan: accessor-nya adalah properti objek yang dievaluasi saat DIPANGGIL, dan
+   * menghitungnya di muka berarti `buatJalur` melempar untuk proyek contract-only yang tidak
+   * pernah menyentuh satu pun accessor backend — yaitu setiap skrip kontrak yang justru harus
+   * tetap berjalan.
+   *
+   * Ini juga yang menggantikan `!`/`as`: penyempitan tipenya lahir dari pemeriksaan runtime yang
+   * sungguhan, jadi tidak ada tempat di mana kompiler dibungkam atas sesuatu yang belum dibuktikan.
+   */
+  const be = (): { dir: string; go: NonNullable<StandardConfig["go"]> } => {
+    const dir = config.layout.backendDir;
+    const go = config.go;
+    if (dir === undefined || go === undefined) throw new GalatTanpaLapisBackend();
+    return { dir, go };
+  };
 
   const jalur: Jalur = {
     akar,
@@ -116,24 +168,24 @@ export function buatJalur(config: StandardConfig, akar: string): Jalur {
       return `${rel}/${config.contract.shared[nama]}${pointer}`;
     },
 
-    backend: (...seg) => path.join(akar, config.layout.backendDir, ...seg),
-    goGen: (...seg) => path.join(akar, config.layout.backendDir, config.go.genDir, ...seg),
-    goFeature: (...seg) => path.join(akar, config.layout.backendDir, config.go.featureDir, ...seg),
+    backend: (...seg) => path.join(akar, be().dir, ...seg),
+    goGen: (...seg) => path.join(akar, be().dir, be().go.genDir, ...seg),
+    goFeature: (...seg) => path.join(akar, be().dir, be().go.featureDir, ...seg),
     goEntrypoint: () => {
-      const e = config.go.entrypoint;
-      return e === undefined || e.trim() === "" ? null : path.join(akar, config.layout.backendDir, e);
+      const e = be().go.entrypoint;
+      return e === undefined || e.trim() === "" ? null : path.join(akar, be().dir, e);
     },
     permissionSeeds: () => (config.contract.permissionSeeds ?? []).map((p) => path.join(akar, p)),
 
     // Jalur IMPOR Go selalu memakai `/`, apa pun pemisah jalur host-nya — kunci config yang
     // menyimpan jalur BERKAS (`genDir`, `dtoconvPkg`) karena itu dipecah per segmen lalu
     // disatukan ulang, bukan disambung mentah.
-    goImport: (...seg) => [config.go.modulePath, ...seg.flatMap((s) => s.split(/[\\/]/))]
+    goImport: (...seg) => [be().go.modulePath, ...seg.flatMap((s) => s.split(/[\\/]/))]
       .filter((s) => s !== "")
       .join("/"),
-    goImportGen: (...seg) => jalur.goImport(config.go.genDir, ...seg),
-    goPlatform: (nama) => jalur.goImport(path.dirname(config.go.dtoconvPkg), nama),
-    sufiksGen: () => config.go.genSuffix,
+    goImportGen: (...seg) => jalur.goImport(be().go.genDir, ...seg),
+    goPlatform: (nama) => jalur.goImport(path.dirname(be().go.dtoconvPkg), nama),
+    sufiksGen: () => be().go.genSuffix,
   };
   return jalur;
 }

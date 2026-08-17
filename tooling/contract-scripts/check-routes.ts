@@ -47,6 +47,7 @@ import { readFileSync } from "node:fs";
 import { parse } from "yaml";
 import { muatKonteks } from "./konteks.js";
 import { buatPengumpul } from "./aturan.js";
+import { adaLapisBackend } from "./paths.js";
 import { listFeatureDirsWithRegister } from "./lib/routes.js";
 import { checkModuleWiring } from "./lib/mainWiring.js";
 import { checkParamPositionCollisions } from "./lib/paramPositions.js";
@@ -66,7 +67,23 @@ const { jalur, config, t, aturan } = await muatKonteks();
 
 const berkasBukuBesar = jalur.ledger("mountedModules");
 const berkasOptIn = jalur.ledger("envelopeOptIn");
-const dirFeature = jalur.goFeature();
+
+/**
+ * Skrip ini memainkan DUA gate sekaligus, dan cuma satu di antaranya menyentuh backend:
+ * `gate:backend-routes` (modul terpasang di titik masuk) dan `gate:contract-routes` (tabrakan nama
+ * parameter — murni sisi kontrak). Karena itu ia terdaftar di kedua lapis, dan karena itu pula ia
+ * TIDAK boleh keluar 2 di proyek contract-only: `standard gate --lapis contract` akan berhenti bisa
+ * hijau untuk mereka, padahal paruh kontraknya sepenuhnya berlaku.
+ *
+ * Jadi paruh backend DILEWATI — dan lewatannya DICETAK. Pemeriksaan yang diam-diam tidak berjalan
+ * adalah kelas cacat yang paket ini ada untuk melawannya; pembaca yang melihat langkah ini lulus
+ * harus tahu ia lulus SEPARUH, dan kenapa.
+ */
+const adaBackend = adaLapisBackend(config);
+if (!adaBackend) {
+  console.log(t("kontrak.rute.lewat_backend"));
+}
+const dirFeature = adaBackend ? jalur.goFeature() : null;
 // Label dirakit di muka HANYA karena ia diteruskan ke fungsi lib sebagai prefix; yang MENCATAT
 // aturannya adalah `pengumpul.label`, jadi keduanya sengaja dipanggil di titik pemakaiannya
 // masing-masing di bawah, bukan sekali di sini.
@@ -78,7 +95,7 @@ const bundle = parse(readFileSync(jalur.bundle(), "utf8")) as {
 const paths = bundle.paths ?? {};
 
 const temuan: string[] = [];
-const fiturBerRegister = listFeatureDirsWithRegister(dirFeature);
+const fiturBerRegister = dirFeature === null ? [] : listFeatureDirsWithRegister(dirFeature);
 
 // — (a) tiap berkas pendaftaran wajib benar-benar terpasang di titik masuk.
 //
@@ -87,14 +104,18 @@ const fiturBerRegister = listFeatureDirsWithRegister(dirFeature);
 // gate lolos; config kosong + feature ADA = pemeriksaan ini tidak berjalan sama sekali, dan gate
 // yang tidak menjalankan pemeriksaannya mencetak hijau yang sama persis dengan gate yang lulus
 // ([[G-05]]: gagal pada semesta kosong, jangan diam).
-const entrypoint = jalur.goEntrypoint();
-const penanda = config.go.registrarType;
-if (entrypoint === null || penanda === undefined || penanda.trim() === "") {
+const entrypoint = adaBackend ? jalur.goEntrypoint() : null;
+const penanda = config.go?.registrarType;
+if (!adaBackend) {
+  // Sengaja kosong: tidak ada direktori feature untuk dipindai, jadi tidak ada yang bisa
+  // dilanggar. Lewatannya sudah dicetak di atas — di sini tidak boleh ada temuan, karena
+  // "tidak punya backend" bukan pelanggaran.
+} else if (entrypoint === null || penanda === undefined || penanda.trim() === "") {
   if (fiturBerRegister.length > 0) {
     temuan.push(
       `${pengumpul.label("backend", "01")} ${t("kontrak.rute.entrypoint_tak_dikonfigurasi", {
         jumlah: String(fiturBerRegister.length),
-        dir: dirFeature,
+        dir: dirFeature ?? "",
       })}`,
     );
   }
@@ -103,7 +124,7 @@ if (entrypoint === null || penanda === undefined || penanda.trim() === "") {
     ...checkModuleWiring(
       readFileSync(entrypoint, "utf8"),
       fiturBerRegister,
-      { featureDir: config.go.featureDir, penanda, namaBerkas: entrypoint },
+      { featureDir: config.go?.featureDir ?? "", penanda, namaBerkas: entrypoint },
       t,
       pengumpul.label("backend", "01"),
     ),
@@ -136,19 +157,23 @@ const tagOptIn = (
 temuan.push(
   ...periksaCakupanTag(bukuBesar, tagOptIn, { bukuBesar: berkasBukuBesar, optIn: berkasOptIn }, t, pengumpul.label("gate", "05")),
 );
-temuan.push(
-  ...periksaKesesuaianMount(bukuBesar, pembacaRegister(dirFeature), berkasBukuBesar, t, pengumpul.label("gate", "05")),
-);
+if (dirFeature !== null) {
+  temuan.push(
+    ...periksaKesesuaianMount(bukuBesar, pembacaRegister(dirFeature), berkasBukuBesar, t, pengumpul.label("gate", "05")),
+  );
+}
 
 // — (d) Sumbu generasi.
 //
 // Arah yang membuat ini berharga: direktori berkerangka generated yang TIDAK tercatat. Kerangka
 // tergenerate belum punya implementasi akses datanya — ia boot, terdaftar di router, dan PANIC
 // pada request pertama. Tanpa gate ini kegagalannya baru terlihat di produksi.
-const pembaca = pembacaGenerasi(dirFeature, jalur.sufiksGen());
-temuan.push(
-  ...periksaGenerasi(bukuBesar, pembaca.daftarDir, pembaca.bacaKeadaan, berkasBukuBesar, t, pengumpul.label("gate", "05")),
-);
+if (dirFeature !== null) {
+  const pembaca = pembacaGenerasi(dirFeature, jalur.sufiksGen());
+  temuan.push(
+    ...periksaGenerasi(bukuBesar, pembaca.daftarDir, pembaca.bacaKeadaan, berkasBukuBesar, t, pengumpul.label("gate", "05")),
+  );
+}
 
 if (temuan.length) {
   console.error(t("kontrak.rute.gagal", { jumlah: String(temuan.length) }));

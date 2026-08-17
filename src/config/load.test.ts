@@ -50,7 +50,10 @@ describe("loadConfig", () => {
     const akar = await proyek();
     const { config, akar: ketemu } = await loadConfig(path.join(akar, "a", "b"));
     expect(ketemu).toBe(akar);
-    expect(config.go.modulePath).toBe("example.com/p/apps/api");
+    // Config contoh menyatakan lapis backend, jadi `go` ADA — dituntut eksplisit alih-alih
+    // dibungkam `!`, supaya hari config contoh berubah bentuk yang merah adalah baris ini.
+    expect(config.go, "config contoh wajib menyatakan blok go").toBeDefined();
+    expect(config.go?.modulePath).toBe("example.com/p/apps/api");
   });
 
   it("melempar bila tidak ada config di jalur ke atas", async () => {

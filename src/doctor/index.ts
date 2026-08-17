@@ -165,7 +165,11 @@ async function periksaWorkflow(
     if (wajib === undefined) continue;
     const prefiksSah = daftar.filter((p) => !p.startsWith("!")).map(prefiksHarfiah);
     for (const kunci of wajib) {
-      const dirLayout = config.layout[kunci].replace(/\/+$/, "");
+      // Kunci layout yang tidak dinyatakan tidak bisa dituntut diliput `paths:` — proyek
+      // contract-only memang tidak punya `backendDir` untuk diliput siapa pun.
+      const nilaiLayout = config.layout[kunci];
+      if (nilaiLayout === undefined) continue;
+      const dirLayout = nilaiLayout.replace(/\/+$/, "");
       const diliput = prefiksSah.some(
         (p) => p !== "" && (p === dirLayout || dirLayout.startsWith(`${p}/`)),
       );
@@ -234,7 +238,6 @@ export async function jalankanDoctor(
   };
 
   await adaPath("layout.contractDir", config.layout.contractDir, "dir");
-  await adaPath("layout.backendDir", config.layout.backendDir, "dir");
   await adaPath("layout.frontendDir", config.layout.frontendDir, "dir");
 
   for (const [nama, berkas] of Object.entries(config.contract.shared)) {
@@ -248,57 +251,75 @@ export async function jalankanDoctor(
     await adaPath(`ledgers.${nama}`, path.join(config.layout.contractDir, berkas), "file");
   }
 
-  // Pemeriksaan keberadaan+jenis go.mod dipakai ulang dari `adaPath` (bukan duplikat logikanya)
-  // supaya ENOENT vs EACCES vs "itu direktori bukan berkas" dilabeli konsisten dengan
-  // pemeriksaan path lain. Kalau itu lolos, baru dibaca isinya untuk dicocokkan modulePath-nya.
-  const jalurGoMod = path.join(config.layout.backendDir, "go.mod");
-  if (await adaPath("layout.backendDir/go.mod", jalurGoMod, "file")) {
-    jumlahPemeriksaan += 1;
-    try {
-      const goMod = await readFile(path.join(akar, jalurGoMod), "utf8");
-      const baris = /^module\s+(\S+)/m.exec(goMod);
-      if (baris === null || baris[1] !== config.go.modulePath) {
+  /**
+   * SELURUH lapis backend — direktorinya, `go.mod`-nya, dan toolchain-nya — dilewati kalau config
+   * tidak menyatakannya.
+   *
+   * Sinyalnya `layout.backendDir` DITULIS di config, bukan direktorinya ada di disk, dan bedanya
+   * menentukan: kalau ketiadaan DI DISK yang jadi pemicu, satu salah ketik pada jalurnya berubah
+   * jadi tombol mati diam-diam — `doctor` hijau, ketiga pemeriksaan berhenti berjalan, dan tidak
+   * ada yang tahu. Dengan sinyal eksplisit, `backendDir` yang ADA tapi salah ketik tetap MERAH
+   * lewat `adaPath` persis seperti sebelumnya.
+   *
+   * `go` ikut dituntut ada: skema JSON menuntutnya lewat `if`/`then`, tapi `jalankanDoctor` juga
+   * dipanggil dari uji dengan config yang dirakit tangan. Yang menyempitkan tipenya di sini adalah
+   * pemeriksaan runtime yang sungguhan, bukan `!`.
+   *
+   * Yang dilewati TERBACA, bukan cuma tidak terjadi: `jumlahPemeriksaan` ikut mengecil, dan baris
+   * ringkasan `doctor.sehat` mencetak angkanya. Proyek contract-only melaporkan angka yang lebih
+   * kecil daripada proyek berlapis backend, dan selisih itulah tandanya.
+   */
+  const backendDir = config.layout.backendDir;
+  const go = config.go;
+  if (backendDir !== undefined && go !== undefined) {
+    await adaPath("layout.backendDir", backendDir, "dir");
+
+    // Pemeriksaan keberadaan+jenis go.mod dipakai ulang dari `adaPath` (bukan duplikat logikanya)
+    // supaya ENOENT vs EACCES vs "itu direktori bukan berkas" dilabeli konsisten dengan
+    // pemeriksaan path lain. Kalau itu lolos, baru dibaca isinya untuk dicocokkan modulePath-nya.
+    const jalurGoMod = path.join(backendDir, "go.mod");
+    if (await adaPath("layout.backendDir/go.mod", jalurGoMod, "file")) {
+      jumlahPemeriksaan += 1;
+      try {
+        const goMod = await readFile(path.join(akar, jalurGoMod), "utf8");
+        const baris = /^module\s+(\S+)/m.exec(goMod);
+        if (baris === null || baris[1] !== go.modulePath) {
+          temuan.push(
+            msg(pesan, "doctor.module_beda", {
+              config: go.modulePath,
+              nyata: baris?.[1] ?? "(tidak ada direktif module)",
+            }),
+          );
+        }
+      } catch (e) {
         temuan.push(
-          msg(pesan, "doctor.module_beda", {
-            config: config.go.modulePath,
-            nyata: baris?.[1] ?? "(tidak ada direktif module)",
+          msg(pesan, "doctor.path_tak_terbaca", {
+            kunci: "layout.backendDir/go.mod",
+            jalur: jalurGoMod,
+            sebab: (e as NodeJS.ErrnoException).code ?? String(e),
           }),
         );
       }
-    } catch (e) {
-      temuan.push(
-        msg(pesan, "doctor.path_tak_terbaca", {
-          kunci: "layout.backendDir/go.mod",
-          jalur: jalurGoMod,
-          sebab: (e as NodeJS.ErrnoException).code ?? String(e),
-        }),
-      );
-    }
 
-    /**
-     * Toolchain Go, dan pemicunya adalah `go.mod` YANG BARUSAN DITEMUKAN — bukan blok `go` di
-     * config.
-     *
-     * Blok `go` WAJIB ada di `config.schema.json`, jadi konsumen contract-only pun memilikinya;
-     * memakainya sebagai pemicu akan memerahkan orang yang tidak butuh Go sama sekali. Sinyal yang
-     * benar-benar membedakan adalah kenyataan di disk, dan pemeriksaannya sudah dilakukan tepat di
-     * atas ini — jadi ia DIPAKAI ULANG lewat cabang `if` yang sama, bukan diturunkan kedua kalinya
-     * lewat jalur yang bisa menyimpang darinya.
-     *
-     * Cacat yang melahirkannya, diukur di mesin dengan lingkungan disterilkan (`env -i`, PATH tanpa
-     * direktori Go): `standard doctor` keluar 0 dan mencetak "config sehat", `standard gate` keluar
-     * 0 juga, dan `standard verify` baru keluar 2 dengan `spawn go ENOENT`. `INSTALL.md` §10
-     * menamai `doctor` sebagai cara membuktikan pemasangan benar — jadi pemakainya dapat hijau,
-     * mempercayainya, lalu meledak di `make gen-go` pertama. Yang salah bukan kegagalan `verify`
-     * (ia justru benar: keluar 2, menyebut alatnya, menolak berpura-pura memeriksa), melainkan
-     * `doctor` yang menyatakan sehat atas pemasangan yang tidak bisa menjalankan separuh
-     * perintahnya.
-     */
-    const daftarPath = process.env["PATH"] ?? "";
-    for (const alat of ALAT_GO) {
-      jumlahPemeriksaan += 1;
-      if (!(await bisaDiresolusi(alat, daftarPath))) {
-        temuan.push(msg(pesan, "doctor.toolchain_go_hilang", { alat, jalur: jalurGoMod }));
+      /**
+       * Toolchain Go, dan pemicunya `go.mod` YANG BARUSAN DITEMUKAN — di dalam cabang yang sama
+       * dengan pemeriksaan lapis backend di atasnya, bukan diturunkan kedua kalinya.
+       *
+       * Cacat yang melahirkannya, diukur di mesin dengan lingkungan disterilkan (`env -i`, PATH
+       * tanpa direktori Go): `standard doctor` keluar 0 dan mencetak "config sehat", `standard
+       * gate` keluar 0 juga, dan `standard verify` baru keluar 2 dengan `spawn go ENOENT`.
+       * `INSTALL.md` §10 menamai `doctor` sebagai cara membuktikan pemasangan benar — jadi
+       * pemakainya dapat hijau, mempercayainya, lalu meledak di `make gen-go` pertama. Yang salah
+       * bukan kegagalan `verify` (ia justru benar: keluar 2, menyebut alatnya, menolak berpura-pura
+       * memeriksa), melainkan `doctor` yang menyatakan sehat atas pemasangan yang tidak bisa
+       * menjalankan separuh perintahnya.
+       */
+      const daftarPath = process.env["PATH"] ?? "";
+      for (const alat of ALAT_GO) {
+        jumlahPemeriksaan += 1;
+        if (!(await bisaDiresolusi(alat, daftarPath))) {
+          temuan.push(msg(pesan, "doctor.toolchain_go_hilang", { alat, jalur: jalurGoMod }));
+        }
       }
     }
   }

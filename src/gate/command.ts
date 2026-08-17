@@ -23,6 +23,7 @@ import { msg, type Pesan } from "../messages/index.js";
 import { bacaArgv } from "../argv.js";
 import { cetakBantuanSub, jalankanAlat, mintaBantuan, muatKonteksAlat } from "../gen/command.js";
 import { dirSkripKontrak, jalurTsx } from "../paket.js";
+import { adaLapisBackend } from "../../tooling/contract-scripts/paths.js";
 
 export type LapisGate = "contract" | "backend";
 
@@ -98,7 +99,8 @@ export type KunciGate =
   | "gate.langkah"
   | "gate.langkah_gagal"
   | "gate.berkas_hilang"
-  | "gate.ok";
+  | "gate.ok"
+  | "gate.lapis_backend_dilewati";
 
 export type TGate = (kunci: KunciGate, vars?: Record<string, string>) => string;
 
@@ -225,6 +227,24 @@ export const gate: Subperintah = async (argv, tulis) => {
     }
   }
 
+  /**
+   * Ringkasan yang menyebut lapis yang DILEWATI, bukan cuma yang lulus.
+   *
+   * Tiap langkah mencetak lewatannya sendiri di stdout-nya, tapi baris ringkasan inilah yang orang
+   * baca — dan CI-lah yang paling sering cuma menyimpan baris terakhir. "6 gate lulus" yang
+   * menyembunyikan bahwa satu di antaranya lulus SEPARUH adalah hijau yang sama butanya dengan
+   * gate yang tidak berjalan. Jadi gate lapis backend yang tidak bisa berjalan disebut di sini,
+   * dengan namanya.
+   */
+  const gateDilewati = adaLapisBackend(konteks.config)
+    ? []
+    : [...new Set(terpilih.filter((l) => l.lapis.includes("backend")).flatMap((l) => l.gate))]
+        .filter((g) => g.includes("backend"))
+        .sort();
+
   tulis(t("gate.ok", { jumlah: String(terpilih.length), langkah: terpilih.map((l) => l.nama).join(", ") }));
+  if (gateDilewati.length > 0) {
+    tulis(t("gate.lapis_backend_dilewati", { gate: gateDilewati.join(", ") }));
+  }
   return 0;
 };

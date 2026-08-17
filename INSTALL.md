@@ -14,6 +14,10 @@ di dalamnya (rekomendasi: `<proyek>/standards/engineering-baseline`).
 
 ## 0. Sebelum mulai — prasyarat yang tidak bisa ditawar
 
+**Lapis backend OPSIONAL.** Kalau proyekmu tidak punya backend Go — kontrak saja, atau kontrak
+plus frontend — hilangkan `layout.backendDir` dan blok `go` dari config, dan ketiga kelompok di
+bawah menciut jadi satu (Node + pnpm). Bentuk config-nya ada di §1.2, siap disalin.
+
 Ada tiga kelompok, dan **derajat penjagaannya berbeda** — bacalah bedanya, karena ia menentukan
 kapan kau tahu sesuatu kurang:
 
@@ -25,6 +29,9 @@ kapan kau tahu sesuatu kurang:
 
 Yang **tidak** dijaga adalah kelompok ketiga, dan itulah satu-satunya yang akan menemuimu sebagai
 galat kompilasi alih-alih sebagai gate merah yang menjelaskan diri.
+
+Ketiganya berlaku **hanya untuk proyek berlapis backend**. Proyek contract-only tidak menyentuh
+satu pun: tidak ada Go yang dipanggil, tidak ada paket platform yang perlu ditulis.
 
 ### 0.1 Toolchain
 
@@ -104,6 +111,44 @@ memeriksa apa pun alih-alih gagal, jadi isi ketiganya begitu proyekmu punya bent
 | `go.entrypoint` | jalur titik masuk aplikasi relatif `backendDir`, mis. `cmd/server/main.go` | gate rute tidak bisa membuktikan modulmu benar-benar terpasang; MERAH kalau direktori feature TIDAK kosong |
 | `go.registrarType` | potongan sumber Go **harfiah** yang membuka daftar modul di titik masuk, mis. `[]server.FeatureRegistrar{` — salin dari kodemu, termasuk kurung kurawalnya | sama seperti di atas: gate rute kehilangan titik bacanya |
 | `contract.permissionSeeds` | daftar berkas tempat baris permission DIBUAT (seeder/migrasi/fixture), relatif akar proyek | gate permission tidak bisa membuktikan tiap entri katalog bisa dipegang role; kosong + katalog TIDAK kosong = MERAH |
+
+#### Proyek TANPA lapis backend
+
+Kalau proyekmu kontrak-saja (atau kontrak + frontend), **hilangkan `layout.backendDir` dan seluruh
+blok `go`**. Skema menuntut `go` hanya kalau `backendDir` ada, jadi config di bawah lolos validasi
+apa adanya — salin, ganti nilainya:
+
+<!-- berkas-contoh: standard.config.contract-only.json -->
+```json
+{
+  "layout": { "contractDir": "packages/contract", "frontendDir": "apps/web" },
+  "contract": { "bundle": "dist/openapi.bundled.yaml", "sharedDir": "openapi/_shared",
+                "shared": { "envelope": "envelope.yaml", "permissions": "permissions.yaml",
+                            "errors": "errors.yaml", "publicOps": "public-operations.yaml" },
+                "permissionSeeds": ["db/seed/permissions.ts"] },
+  "ledgers": { "envelopeOptIn": "envelope-opt-in.json", "mountedModules": "mounted-modules.json",
+               "routes": "routes.json", "coverage": "coverage.json" },
+  "emit": { "permissions": "apps/web/src/generated/permissions.ts",
+            "errorCodes": "apps/web/src/generated/errorCodes.ts" },
+  "idempotency": { "uuidNamespace": "REPLACE-ME" },
+  "rules": { "docBase": "docs/rules", "prefix": { "contract": "C", "backend": "B", "gate": "G", "tenancy": "T" } },
+  "language": "id"
+}
+```
+
+**Yang menjadi berbeda, dan tak satu pun diam-diam:**
+
+| Perintah | Di proyek contract-only |
+|---|---|
+| `standard doctor` | hijau; jumlah pemeriksaannya **lebih kecil** — direktori backend, `go.mod`, dan toolchain Go tidak diperiksa karena tidak dinyatakan |
+| `standard gate --lapis contract` | hijau; `gate:backend-routes` **DILEWATI**, dan lewatannya dicetak di langkahnya **dan** di baris ringkasan |
+| `standard gen common` | **berhasil** — katalog TypeScript dan `dist/openapi.shared.yaml` tetap ditulis; berkas Go-nya dilewati, dan pesannya **menyebut berkas apa yang tidak ditulis** |
+| `gen wiring`, `gen dto`, `gen module`, `gate --only tenancy-checklist` | **keluar 2** dengan kalimat yang menyebut config ini tidak menyatakan lapis backend |
+
+**Yang TIDAK melonggar:** `layout.backendDir` yang ADA tapi salah ketik tetap **MERAH**. Sinyal
+"tidak ada lapis backend" adalah kuncinya **dihilangkan** — bukan direktorinya kebetulan tidak ada
+di disk. Kalau ketiadaan di disk yang jadi pemicu, satu salah ketik berubah jadi tombol mati
+diam-diam: `doctor` hijau, seluruh lapis backend berhenti diperiksa, dan tidak ada yang tahu.
 
 ### 1.3 Buat keempat berkas schema bersama
 
@@ -610,6 +655,11 @@ DAN `gate` sama-sama keluar 0, dan yang pertama berbunyi merah barulah `verify` 
 percaya pemasangannya terbukti benar. `doctor` tidak boleh menyatakan sehat atas pemasangan yang
 tidak bisa menjalankan separuh perintahnya.
 
-Proyek **tanpa** `go.mod` di `layout.backendDir` tidak dituntut punya toolchain Go: pemeriksaan itu
-dipicu oleh kenyataan di disk, bukan oleh blok `go` di config — yang wajib ada bagi semua orang,
-termasuk yang tidak memakai Go sama sekali.
+**Proyek contract-only** — yang config-nya tidak menyatakan `layout.backendDir` sama sekali (§1.2)
+— melewati ketiga pemeriksaan lapis backend seluruhnya: direktorinya, `go.mod`-nya, dan toolchain
+Go-nya. Lewatannya terbaca dari angkanya: `doctor` mencetak jumlah pemeriksaan yang **lebih kecil**
+daripada proyek berlapis backend, dan selisih itulah tandanya.
+
+Yang **tidak** melonggar: `layout.backendDir` yang ADA tapi salah ketik tetap merah. Sinyal "tidak
+punya lapis backend" adalah kuncinya dihilangkan, bukan direktorinya kebetulan tidak ada — kalau
+sebaliknya, satu salah ketik akan mematikan seluruh lapis pemeriksaan tanpa sepatah kata.

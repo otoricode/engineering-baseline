@@ -1,8 +1,16 @@
 export const NAMESPACE_BELUM_DIISI = "REPLACE-ME";
 
 export type StandardConfig = {
-  layout: { contractDir: string; backendDir: string; frontendDir: string };
-  go: {
+  /**
+   * `backendDir` OPSIONAL, dan ketiadaannya adalah SATU-SATUNYA sinyal "proyek ini tidak punya
+   * lapis backend". Bukan direktori yang kebetulan tidak ada di disk: kalau ketiadaan di disk yang
+   * jadi pemicu, satu salah ketik pada jalur berubah jadi tombol mati diam-diam — `doctor` hijau,
+   * seluruh lapis backend berhenti diperiksa, dan tidak ada yang tahu. Dengan sinyal eksplisit,
+   * `backendDir` yang ADA tapi salah ketik tetap MERAH.
+   */
+  layout: { contractDir: string; backendDir?: string; frontendDir: string };
+  /** Wajib bila dan hanya bila `layout.backendDir` ada — ditegakkan `if`/`then` di skema JSON. */
+  go?: {
     modulePath: string; genDir: string; featureDir: string; dtoconvPkg: string; genSuffix: string;
     // Ketiganya OPSIONAL dan dipakai HANYA oleh gate rute (tooling/contract-scripts/check-routes.ts).
     // Bukan basa-basi bahwa mereka opsional: gate itu memeriksa "tiap direktori feature benar-benar

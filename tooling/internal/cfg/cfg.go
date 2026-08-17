@@ -93,6 +93,14 @@ func Muat(mulaiDari string) (Config, string, error) {
 			if err := json.Unmarshal(mentah, &c); err != nil {
 				return Config{}, "", fmt.Errorf("%s: %w", filepath.Join(dir, namaConfig), err)
 			}
+			// Penjaga dipasang di KEDUA cabang pemuatan, bukan cuma di `MuatDari`: pembungkus
+			// `standard` meneruskan `-config <direktori proyek>`, dan direktori berujung di sini.
+			// Diukur sebelum penjaga ini ada di sini: `gen dto` mengeluh soal ".github/workflows"
+			// dan `gen module` soal direktori bernama tag-nya — kode keluar 2 yang benar dengan
+			// pesan yang menunjuk tempat yang sama sekali salah.
+			if err := c.periksaLapisBackend(); err != nil {
+				return Config{}, "", fmt.Errorf("%s: %w", filepath.Join(dir, namaConfig), err)
+			}
 			return c, dir, nil
 		}
 		if !os.IsNotExist(err) {
@@ -137,7 +145,37 @@ func MuatDari(jalur string) (Config, string, error) {
 	if err != nil {
 		return Config{}, "", err
 	}
+	if err := c.periksaLapisBackend(); err != nil {
+		return Config{}, "", fmt.Errorf("%s: %w", jalur, err)
+	}
 	return c, akar, nil
+}
+
+// PesanTanpaLapisBackend adalah kalimat tunggal untuk "config ini tidak menyatakan lapis backend".
+//
+// Kedua alat Go di paket ini (genmodule, gendto) HANYA memancarkan kode Go — tidak ada paruh yang
+// bisa dipancarkan tanpa lapis backend, jadi keduanya gagal seluruhnya, bukan sebagian. Yang harus
+// benar adalah KALIMATNYA: tanpa penjaga ini keduanya tetap keluar 2, tapi dengan pesan yang
+// menunjuk jalur karangan hasil menggabungkan direktori kosong — diukur, `gendto` mengeluh soal
+// ".github/workflows" dan `genmodule` soal direktori bernama tag-nya. Kode keluarnya benar dan
+// pesannya menyesatkan; yang kedua itu yang menghabiskan waktu orang.
+const PesanTanpaLapisBackend = "config ini tidak menyatakan lapis backend: `layout.backendDir` " +
+	"tidak diisi, jadi `go.*` tidak wajib dan tidak ada jalur backend yang bisa dirakit. Alat ini " +
+	"hanya memancarkan kode Go, jadi ia tidak bisa berjalan di proyek contract-only. Isi " +
+	"`layout.backendDir` beserta blok `go` kalau proyek ini memang punya backend Go."
+
+// periksaLapisBackend menolak config yang tidak menyatakan lapis backend.
+//
+// Sinyalnya `layout.backendDir` yang KOSONG, sama dengan sisi TypeScript — dan sengaja bukan
+// "direktorinya tidak ada di disk": kalau ketiadaan di disk yang jadi pemicu, satu salah ketik
+// jalur berubah jadi tombol mati diam-diam. `go.modulePath` ikut dituntut karena skema JSON
+// mewajibkannya begitu `backendDir` ada; config yang punya satu tanpa yang lain adalah config yang
+// tidak lolos skema, dan alat ini tidak boleh menebak separuh yang hilang.
+func (c Config) periksaLapisBackend() error {
+	if strings.TrimSpace(c.Layout.BackendDir) == "" || strings.TrimSpace(c.Go.ModulePath) == "" {
+		return errors.New(PesanTanpaLapisBackend)
+	}
+	return nil
 }
 
 // LaporGagalConfig melokalkan satu-satunya kegagalan muat config yang punya terjemahan. Bahasa

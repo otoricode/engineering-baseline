@@ -72,6 +72,21 @@ beforeAll(async () => {
 });
 
 /** Proyek target sesudah §1 dijalankan harfiah: layout, go.mod, dan keempat schema bersama. */
+/**
+ * `cfg()` selalu merakit config BERLAPIS BACKEND, jadi kedua bidang opsionalnya pasti terisi —
+ * tapi kompiler tidak tahu itu. Penyempitannya lewat pemeriksaan runtime yang MELEMPAR, bukan `!`:
+ * hari `cfg()` berubah jadi contract-only, yang gagal adalah baris ini beserta kalimatnya, bukan
+ * sebuah `undefined` yang menyelinap ke `path.join`.
+ */
+function lapisBackend(c: StandardConfig): { dir: string; modulePath: string } {
+  const dir = c.layout.backendDir;
+  const go = c.go;
+  if (dir === undefined || go === undefined) {
+    throw new Error("cfg() uji ini wajib menyatakan lapis backend (layout.backendDir + go)");
+  }
+  return { dir, modulePath: go.modulePath };
+}
+
 async function proyekSesudahLangkah1(): Promise<{ akar: string; config: StandardConfig }> {
   const akar = await mkdtemp(path.join(tmpdir(), "eb-install-"));
   dirSementara.push(akar);
@@ -82,10 +97,13 @@ async function proyekSesudahLangkah1(): Promise<{ akar: string; config: Standard
   // config dari direktori kerjanya, sama seperti pemasang sungguhan.
   await writeFile(path.join(akar, "standard.config.json"), `${JSON.stringify(c, null, 2)}\n`);
 
-  for (const d of [c.layout.contractDir, c.layout.backendDir, c.layout.frontendDir]) {
+  for (const d of [c.layout.contractDir, lapisBackend(c).dir, c.layout.frontendDir]) {
     await mkdir(path.join(akar, d), { recursive: true });
   }
-  await writeFile(path.join(akar, c.layout.backendDir, "go.mod"), `module ${c.go.modulePath}\n\ngo 1.26\n`);
+  await writeFile(
+    path.join(akar, lapisBackend(c).dir, "go.mod"),
+    `module ${lapisBackend(c).modulePath}\n\ngo 1.26\n`,
+  );
 
   const dirShared = path.join(akar, c.layout.contractDir, c.contract.sharedDir);
   await mkdir(dirShared, { recursive: true });

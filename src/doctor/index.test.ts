@@ -34,13 +34,31 @@ function cfg(ubah: Partial<StandardConfig> = {}): StandardConfig {
   };
 }
 
+/**
+ * `cfg()` selalu merakit config BERLAPIS BACKEND, jadi kedua bidang opsionalnya pasti terisi —
+ * tapi kompiler tidak tahu itu. Penyempitannya lewat pemeriksaan runtime yang MELEMPAR, bukan `!`:
+ * hari `cfg()` berubah jadi contract-only, yang gagal adalah baris ini beserta kalimatnya, bukan
+ * sebuah `undefined` yang menyelinap ke `path.join`.
+ */
+function lapisBackend(c: StandardConfig): { dir: string; modulePath: string } {
+  const dir = c.layout.backendDir;
+  const go = c.go;
+  if (dir === undefined || go === undefined) {
+    throw new Error("cfg() uji ini wajib menyatakan lapis backend (layout.backendDir + go)");
+  }
+  return { dir, modulePath: go.modulePath };
+}
+
 async function proyekSehat(): Promise<string> {
   const akar = daftarkan(await mkdtemp(path.join(tmpdir(), "eb-doc-")));
   const c = cfg();
   await mkdir(path.join(akar, c.layout.contractDir, c.contract.sharedDir), { recursive: true });
-  await mkdir(path.join(akar, c.layout.backendDir), { recursive: true });
+  await mkdir(path.join(akar, lapisBackend(c).dir), { recursive: true });
   await mkdir(path.join(akar, c.layout.frontendDir), { recursive: true });
-  await writeFile(path.join(akar, c.layout.backendDir, "go.mod"), `module ${c.go.modulePath}\n\ngo 1.26\n`);
+  await writeFile(
+    path.join(akar, lapisBackend(c).dir, "go.mod"),
+    `module ${lapisBackend(c).modulePath}\n\ngo 1.26\n`,
+  );
   for (const n of Object.values(c.contract.shared)) {
     await writeFile(path.join(akar, c.layout.contractDir, c.contract.sharedDir, n), "{}\n");
   }
@@ -67,7 +85,10 @@ describe("jalankanDoctor", () => {
 
   it("menolak modulePath yang tak cocok dengan go.mod", async () => {
     const akar = await proyekSehat();
-    const h = await jalankanDoctor(cfg({ go: { ...cfg().go, modulePath: "example.com/lain" } }), akar);
+    const dasar = cfg();
+    const go = dasar.go;
+    if (go === undefined) throw new Error("cfg() uji ini wajib menyatakan blok go");
+    const h = await jalankanDoctor(cfg({ go: { ...go, modulePath: "example.com/lain" } }), akar);
     expect(h.temuan.join("\n")).toContain("go.mod");
   });
 

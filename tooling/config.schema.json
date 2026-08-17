@@ -4,103 +4,233 @@
   "title": "StandardConfig",
   "type": "object",
   "additionalProperties": false,
-  "required": ["layout", "go", "contract", "ledgers", "emit", "idempotency", "rules", "language"],
+  "required": [
+    "layout",
+    "contract",
+    "ledgers",
+    "emit",
+    "idempotency",
+    "rules",
+    "language"
+  ],
   "properties": {
     "layout": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["contractDir", "backendDir", "frontendDir"],
+      "required": [
+        "contractDir",
+        "frontendDir"
+      ],
       "properties": {
-        "contractDir": { "type": "string" },
-        "backendDir": { "type": "string" },
-        "frontendDir": { "type": "string" }
+        "contractDir": {
+          "type": "string"
+        },
+        "backendDir": {
+          "type": "string"
+        },
+        "frontendDir": {
+          "type": "string"
+        }
       }
     },
     "go": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["modulePath", "genDir", "featureDir", "dtoconvPkg", "genSuffix"],
+      "required": [
+        "modulePath",
+        "genDir",
+        "featureDir",
+        "dtoconvPkg",
+        "genSuffix"
+      ],
       "properties": {
-        "modulePath": { "type": "string", "pattern": "^[a-z0-9.\\-]+\\/" },
-        "genDir": { "type": "string" },
-        "featureDir": { "type": "string" },
-        "dtoconvPkg": { "type": "string" },
-        "genSuffix": { "type": "string" },
-        "entrypoint": { "type": "string" },
-        "registrarType": { "type": "string" }
+        "modulePath": {
+          "type": "string",
+          "pattern": "^[a-z0-9.\\-]+\\/"
+        },
+        "genDir": {
+          "type": "string"
+        },
+        "featureDir": {
+          "type": "string"
+        },
+        "dtoconvPkg": {
+          "type": "string"
+        },
+        "genSuffix": {
+          "type": "string"
+        },
+        "entrypoint": {
+          "type": "string"
+        },
+        "registrarType": {
+          "type": "string"
+        }
       }
     },
     "contract": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["bundle", "sharedDir", "shared"],
+      "required": [
+        "bundle",
+        "sharedDir",
+        "shared"
+      ],
       "properties": {
-        "bundle": { "type": "string" },
-        "sharedDir": { "type": "string" },
+        "bundle": {
+          "type": "string"
+        },
+        "sharedDir": {
+          "type": "string"
+        },
         "shared": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["envelope", "permissions", "errors", "publicOps"],
+          "required": [
+            "envelope",
+            "permissions",
+            "errors",
+            "publicOps"
+          ],
           "properties": {
-            "envelope": { "type": "string" },
-            "permissions": { "type": "string" },
-            "errors": { "type": "string" },
-            "publicOps": { "type": "string" }
+            "envelope": {
+              "type": "string"
+            },
+            "permissions": {
+              "type": "string"
+            },
+            "errors": {
+              "type": "string"
+            },
+            "publicOps": {
+              "type": "string"
+            }
           }
         },
-        "permissionSeeds": { "type": "array", "items": { "type": "string" } }
+        "permissionSeeds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
       }
     },
     "ledgers": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["envelopeOptIn", "mountedModules", "routes", "coverage"],
+      "required": [
+        "envelopeOptIn",
+        "mountedModules",
+        "routes",
+        "coverage"
+      ],
       "properties": {
-        "envelopeOptIn": { "type": "string" },
-        "mountedModules": { "type": "string" },
-        "routes": { "type": "string" },
-        "coverage": { "type": "string" }
+        "envelopeOptIn": {
+          "type": "string"
+        },
+        "mountedModules": {
+          "type": "string"
+        },
+        "routes": {
+          "type": "string"
+        },
+        "coverage": {
+          "type": "string"
+        }
       }
     },
     "emit": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["permissions", "errorCodes"],
+      "required": [
+        "permissions",
+        "errorCodes"
+      ],
       "properties": {
-        "permissions": { "type": "string" },
-        "errorCodes": { "type": "string" }
+        "permissions": {
+          "type": "string"
+        },
+        "errorCodes": {
+          "type": "string"
+        }
       }
     },
     "idempotency": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["uuidNamespace"],
+      "required": [
+        "uuidNamespace"
+      ],
       "properties": {
-        "uuidNamespace": { "type": "string" }
+        "uuidNamespace": {
+          "type": "string"
+        }
       }
     },
     "rules": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["docBase", "prefix"],
+      "required": [
+        "docBase",
+        "prefix"
+      ],
       "properties": {
-        "docBase": { "type": "string" },
+        "docBase": {
+          "type": "string"
+        },
         "prefix": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
-          "required": ["contract", "backend", "gate", "tenancy"],
+          "additionalProperties": {
+            "type": "string"
+          },
+          "required": [
+            "contract",
+            "backend",
+            "gate",
+            "tenancy"
+          ],
           "properties": {
-            "contract": { "type": "string" },
-            "backend": { "type": "string" },
-            "gate": { "type": "string" },
-            "tenancy": { "type": "string" }
+            "contract": {
+              "type": "string"
+            },
+            "backend": {
+              "type": "string"
+            },
+            "gate": {
+              "type": "string"
+            },
+            "tenancy": {
+              "type": "string"
+            }
           }
         }
       }
     },
     "language": {
       "type": "string",
-      "enum": ["id", "en"]
+      "enum": [
+        "id",
+        "en"
+      ]
     }
+  },
+  "if": {
+    "type": "object",
+    "properties": {
+      "layout": {
+        "type": "object",
+        "required": [
+          "backendDir"
+        ]
+      }
+    },
+    "required": [
+      "layout"
+    ]
+  },
+  "then": {
+    "required": [
+      "go"
+    ]
   }
 }

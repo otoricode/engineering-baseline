@@ -10,12 +10,13 @@
  * lihat `lib/goFmt.ts` untuk angka yang menjelaskan kenapa melewatinya menumpulkan gate.
  */
 import { muatKonteks } from "./konteks.js";
+import { tambahKeluaranGo } from "./lib/keluaranGo.js";
 import { bacaBendera, BENDERA_APPLY, buatRencana } from "./argumen.js";
 import { loadPermissionCatalog } from "./lib/catalog.js";
 import { gofmtWrite } from "./lib/goFmt.js";
 import { bannerGenerated, komentarGo, komentarTs } from "./lib/banner.js";
 
-const { jalur, t, aturan } = await muatKonteks();
+const { jalur, config, t, aturan } = await muatKonteks();
 const bendera = bacaBendera(process.argv.slice(2), [BENDERA_APPLY], t);
 
 const berkasKatalog = jalur.shared("permissions");
@@ -66,7 +67,10 @@ ${permissions.map((p) => `  ${JSON.stringify(p)},`).join("\n")}
 `;
 
 const rencana = buatRencana(bendera.ada("apply"), t, (s) => console.log(s));
-rencana.tambah(jalur.goGen("permissions.go"), isiGo, (p) => gofmtWrite(p, t));
+tambahKeluaranGo({
+  rencana, jalur, config, namaBerkas: "permissions.go", isi: isiGo, t,
+  tulis: (s) => console.log(s), sesudahTulis: (p) => gofmtWrite(p, t),
+});
 rencana.tambah(jalur.emit("permissions"), isiTs);
 rencana.jalankan();
 

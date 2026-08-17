@@ -31,6 +31,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Subperintah, Tulis } from "../cli.js";
 import { GalatConfig, loadConfig } from "../config/load.js";
+import type { StandardConfig } from "../config/schema.js";
 import { msg, muatPesan, muatPesanSinkron, type Pesan } from "../messages/index.js";
 import { bacaArgv, type Bendera, type SpesifikasiBendera } from "../argv.js";
 import { dirSkripKontrak, dirTooling, jalurTsx } from "../paket.js";
@@ -347,7 +348,7 @@ export async function jalankanAlat(p: PerintahAlat): Promise<number> {
  * sendiri (`KunciGen`, `KunciGate`), dan mengembalikan salah satunya memaksa yang lain memakai
  * cast — yang mematikan justru pemeriksaan tipe yang membuat kunci salah ketik merah saat compile.
  */
-export type KonteksAlat = { akar: string; pesan: Pesan };
+export type KonteksAlat = { akar: string; pesan: Pesan; config: StandardConfig };
 
 /**
  * Config proyek target + katalog dalam bahasa proyek itu. Mengembalikan `null` sesudah mencetak
@@ -393,7 +394,7 @@ export async function cetakBantuanSub(
 export async function muatKonteksAlat(tulis: Tulis): Promise<KonteksAlat | null> {
   try {
     const { config, akar } = await loadConfig(process.cwd());
-    return { akar, pesan: await muatPesan(config.language) };
+    return { akar, pesan: await muatPesan(config.language), config };
   } catch (e) {
     if (e instanceof GalatConfig) {
       // Bahasa proyek justru ada DI DALAM berkas yang tak terbaca; "id" adalah bawaan paket ini
