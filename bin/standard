@@ -2,4 +2,22 @@
 # Shim: satu-satunya entry point paket. Menjalankan CLI lewat tsx supaya tidak ada
 # langkah build antara mengedit sumber dan menjalankannya.
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
-exec "$DIR/node_modules/.bin/tsx" "$DIR/src/cli-entry.ts" "$@"
+TSX="$DIR/node_modules/.bin/tsx"
+
+# Dependensi paket belum terpasang.
+#
+# Ini perintah PERTAMA yang dijalankan orang sesudah menyalin folder ini, jadi kegagalannya harus
+# berbicara. Tanpa penjaga ini `exec` mati dengan galat shell mentah dan kode 127 — bukan kontrak
+# kode keluar paket ini sendiri (0 lulus, 1 ada pelanggaran, 2 ALATNYA gagal), dan bukan kalimat
+# yang memberitahu apa yang harus diperbuat.
+#
+# Kalimatnya DIPAKU, dua bahasa, alih-alih diambil dari katalog pesan: katalog dibaca oleh CLI, dan
+# CLI itulah yang justru belum bisa dijalankan. Memakai katalog di sini berarti menjalankan hal
+# yang barusan terbukti tidak ada.
+if [ ! -x "$TSX" ]; then
+  echo "standard: dependensi paket belum terpasang — jalankan \`pnpm install\` di dalam $DIR lalu ulangi." >&2
+  echo "standard: package dependencies are not installed — run \`pnpm install\` inside $DIR and retry." >&2
+  exit 2
+fi
+
+exec "$TSX" "$DIR/src/cli-entry.ts" "$@"

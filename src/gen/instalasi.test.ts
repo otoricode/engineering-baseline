@@ -40,6 +40,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -328,6 +329,41 @@ describe("paket terpasang yang skemanya hilang", () => {
     expect(kode, keluaran).not.toBe(0);
     expect(keluaran).toContain("config.schema.json");
     expect(keluaran).not.toMatch(/tidak ditemukan/);
+  });
+});
+
+/**
+ * Paket terpasang yang `pnpm install`-nya belum dijalankan.
+ *
+ * Ini keadaan PERTAMA tiap pemakai baru, dan ia ditemukan dengan cara paling mahal: clone bersih
+ * dari remote, lalu `./bin/standard verify` sebelum membaca `INSTALL.md`. Keluarannya `exec: …/tsx:
+ * not found` dengan kode **127** — galat shell mentah, dan kode yang tidak ada di kontrak paket ini
+ * (0 lulus, 1 ada pelanggaran, 2 ALATNYA gagal). Dokumennya benar; yang salah adalah kegagalannya
+ * tidak berbicara di titik paling awal yang mungkin.
+ *
+ * Diuji atas SALINAN terpasang yang symlink `node_modules`-nya dibuang, bukan atas checkout:
+ * checkout selalu punya dependensi, jadi jalur ini secara struktural tak bisa merah dari sana —
+ * persis alasan seluruh berkas ini menguji paket terpasang alih-alih pohon repo.
+ */
+describe("paket terpasang tanpa dependensi", () => {
+  it("keluar 2 dan menyuruh `pnpm install`, bukan 127 dengan galat shell", async () => {
+    const tanpaDeps = pasangPaket(daftarBerkasTerkirim());
+    const tautan = path.join(tanpaDeps, "node_modules");
+    // Dibuktikan ADA sebelum dibuang: tanpa baris ini, merah di bawah juga yang kau dapat dari
+    // salinan yang memang tidak pernah punya dependensi, dan ujinya berhenti menguji penjaganya.
+    // `unlinkSync`, bukan `rmSync`: yang dibuang adalah TAUTANNYA — mengikuti tautan itu berarti
+    // menghapus `node_modules` paket asal.
+    expect(existsSync(tautan)).toBe(true);
+    unlinkSync(tautan);
+    expect(existsSync(tautan)).toBe(false);
+    expect(existsSync(path.join(asal, "node_modules")), "node_modules ASAL wajib utuh").toBe(true);
+
+    const { kode, keluaran } = await standard(["verify"], { paketLain: tanpaDeps });
+    expect(kode, keluaran).toBe(2);
+    expect(keluaran).toContain("pnpm install");
+    // Kalimat lamanya di-assert TIDAK kembali: galat shell mentah adalah bentuk kegagalan yang
+    // penjaga ini ada untuk menggantikannya, bukan sekadar melengkapinya.
+    expect(keluaran).not.toMatch(/not found/);
   });
 });
 
