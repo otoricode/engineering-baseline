@@ -1,0 +1,11 @@
+{
+  "name": "fixture",
+  "private": true,
+  "packageManager": "pnpm@10.11.0",
+  "scripts": {
+    "contract:bundle": "redocly bundle packages/contract/openapi/openapi.yaml -o packages/contract/dist/openapi.bundled.yaml"
+  },
+  "devDependencies": {
+    "@redocly/cli": "2.46.1"
+  }
+}

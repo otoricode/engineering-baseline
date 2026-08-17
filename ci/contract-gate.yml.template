@@ -1,0 +1,95 @@
+# contract-gate — gate lapis KONTRAK.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PLACEHOLDER YANG WAJIB DIISI SAAT PEMASANGAN
+#
+#	{{NODE_VERSION}}    versi Node, mis. "24"
+#	{{PNPM_VERSION}}    versi pnpm, mis. "10.11.0"
+#	{{CONTRACT_DIR}}    layout.contractDir dari standard.config.json
+#
+# Lalu buang akhiran `.template` dan taruh di `.github/workflows/`.
+#
+# Placeholder yang tertinggal di dalam blok `paths:` punya mode gagal yang khusus buruk: workflow
+# ini TIDAK PERNAH TERPICU, dan workflow yang tidak pernah terpicu tidak bisa dibedakan dari
+# workflow yang selalu hijau. Dua hal menutupnya, dan keduanya sengaja:
+#
+#   1. `paths:` memuat `.github/workflows/**`, jadi PR yang memasang workflow ini memicu dirinya
+#      sendiri — placeholder yang belum diisi ketahuan di PR pemasangan, bukan berbulan-bulan
+#      kemudian;
+#   2. langkah pertama memindai SELURUH berkas workflow, bukan cuma berkas ini, jadi workflow lain
+#      yang placeholder-nya tertinggal ikut ketahuan dari sini.
+name: contract-gate
+
+on:
+  pull_request:
+    paths:
+      - "{{CONTRACT_DIR}}/**"
+      - ".github/workflows/**"
+
+jobs:
+  contract-gate:
+    runs-on: ubuntu-latest
+    env:
+      # Perintah milik PROYEK yang membangun bundel kontrak. Gate di bawah membaca berkas bundel
+      # (`contract.bundle`), jadi bundel yang basi berarti gate memeriksa kontrak kemarin. Ganti
+      # kalau nama skripnya berbeda; kalau salah, langkahnya gagal NYARING — bukan diam.
+      PERINTAH_BUNDLE: pnpm run contract:bundle
+      # Linter OpenAPI milik proyek. Lihat langkah `gate:contract-lint` untuk pembagian tugasnya.
+      PERINTAH_LINT: pnpm exec redocly lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: placeholder template wajib sudah diisi
+        run: |
+          if grep -rEn '\{\{[A-Z_]+\}\}' .github/workflows/; then
+            echo "::error::masih ada placeholder {{...}} yang belum diisi di berkas workflow di atas."
+            echo "Placeholder di dalam blok paths: membuat workflow-nya TIDAK PERNAH TERPICU — hijau yang buta."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "{{PNPM_VERSION}}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "{{NODE_VERSION}}"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Pertama, selalu: config yang menunjuk jalur yang tidak ada membuat SETIAP gate di bawahnya
+      # gagal karena alasan yang salah, dan pesannya akan menyalahkan kontrak.
+      - name: standard doctor
+        run: standard doctor
+
+      # Bundel DIREGENERASI lalu diffnya dituntut KOSONG — bentuk yang sama dengan
+      # `gate:generated-sync` di lapis backend, dan alasan yang sama persis.
+      #
+      # Tanpa `git diff --exit-code` di sini, langkah ini cuma memastikan perintah bundelnya keluar
+      # 0. Bundel yang ter-commit boleh saja tetap BASI: gate di bawah membaca bundel yang baru
+      # ditulis di runner ini (jadi ia hijau), sementara semua yang membaca bundel ter-commit —
+      # `gen wiring`, `gen dto`, dan siapa pun yang meng-generate dari checkout — bekerja atas
+      # kontrak kemarin. Komentar di blok `env` di atas sudah menyebut bahayanya; baris ini yang
+      # menjaganya.
+      - name: bundel kontrak sinkron dengan sumbernya
+        run: |
+          $PERINTAH_BUNDLE
+          git diff --exit-code
+
+      # gate:contract-lint — penegak [[C-05]] (bentuk union di badan permintaan dilarang).
+      #
+      # Langkah ini menjalankan LINTER OPENAPI-nya: dokumennya sah menurut spesifikasi, $ref hidup,
+      # operationId unik. Itu alat luar, dan itu sah.
+      #
+      # Paruh KEDUA aturan itu tidak bisa ditegakkan linter mana pun, dan sebut ini saat mengutip
+      # langkah ini: badan permintaan berbentuk union adalah OpenAPI yang SEPENUHNYA SAH — linter
+      # meloloskannya tanpa sepatah kata, generator yang menolaknya. Paruh itu ditegakkan
+      # `standard gate` di langkah berikutnya, sumbernya
+      # `tooling/contract-scripts/check-contract-lint.ts`, dan pesan gagalnya menyitir C-05.
+      - name: "gate:contract-lint (linter OpenAPI)"
+        run: $PERINTAH_LINT
+
+      # Seluruh gate lapis kontrak: envelope, permission, allowlist publik, badan permintaan,
+      # bentuk union, dan tabrakan nama parameter path. Daftarnya hidup di paket standar, bukan di
+      # berkas ini — menambah gate tidak menuntut menyunting workflow tiap proyek.
+      - name: standard gate --lapis contract
+        run: standard gate --lapis contract

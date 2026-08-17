@@ -1,0 +1,95 @@
+# backend-gate — gate lapis BACKEND.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PLACEHOLDER YANG WAJIB DIISI SAAT PEMASANGAN
+#
+#	{{GO_VERSION}}      versi Go, mis. "1.26"
+#	{{NODE_VERSION}}    versi Node, mis. "24"
+#	{{PNPM_VERSION}}    versi pnpm, mis. "10.11.0"
+#	{{BACKEND_DIR}}     layout.backendDir dari standard.config.json
+#	{{CONTRACT_DIR}}    layout.contractDir dari standard.config.json
+#
+# Lalu buang akhiran `.template` dan taruh di `.github/workflows/`.
+#
+# Node DAN Go, keduanya, dan itu bukan kelebihan: `standard` adalah CLI TypeScript, jadi gate lapis
+# backend pun menuntut toolchain Node. Workflow yang hanya menyiapkan Go akan gagal di langkah
+# pertama yang memanggil `standard` — dan pernah terjadi persis begitu di sebuah repo, di mana
+# target Makefile yang memanggil pnpm mematikan gate tanpa suara karena CI-nya cuma setup-go.
+#
+# `paths:` memuat direktori KONTRAK juga: gate di bawah membaca kontrak (rute, nama parameter),
+# jadi perubahan kontrak saja bisa memerahkannya — dan gate yang tidak terpicu untuk perubahan yang
+# bisa memerahkannya adalah gate yang hijau karena tidak berjalan.
+name: backend-gate
+
+on:
+  pull_request:
+    paths:
+      - "{{BACKEND_DIR}}/**"
+      - "{{CONTRACT_DIR}}/**"
+      - ".github/workflows/**"
+
+jobs:
+  backend-gate:
+    runs-on: ubuntu-latest
+    env:
+      # Tag kontrak yang kode Go-nya digenerate, dipisah spasi. WAJIB diisi: daftar kosong membuat
+      # langkah `gate:generated-sync` di bawah meregenerasi NOL berkas lalu melapor diff kosong —
+      # hijau yang berarti "tidak ada yang diperiksa", bukan "semuanya sinkron".
+      TAGS: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: placeholder template wajib sudah diisi
+        run: |
+          if grep -rEn '\{\{[A-Z_]+\}\}' .github/workflows/; then
+            echo "::error::masih ada placeholder {{...}} yang belum diisi di berkas workflow di atas."
+            echo "Placeholder di dalam blok paths: membuat workflow-nya TIDAK PERNAH TERPICU — hijau yang buta."
+            exit 1
+          fi
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "{{GO_VERSION}}"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "{{PNPM_VERSION}}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "{{NODE_VERSION}}"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: standard doctor
+        run: standard doctor
+
+      # gate:generated-sync — penegak [[B-03]] (artefak generated tidak pernah diedit tangan).
+      #
+      # Regenerasi lalu tuntut diff KOSONG. Dua kelas sekaligus tertangkap: suntingan tangan atas
+      # berkas generated, dan kontrak yang berubah tanpa hasil generate-nya ikut di-commit.
+      #
+      # `make gen-go` memakai `go tool oapi-codegen` — versinya dipaku direktif `tool` di go.mod.
+      # Kalau ia diganti `go run <modul>@versi`, setiap mesin bisa memancarkan keluaran yang
+      # berbeda untuk kontrak yang IDENTIK, dan langkah ini merah karena alasan yang sepenuhnya
+      # salah: orang yang membacanya akan mencari perubahan kontrak yang tidak pernah ada.
+      - name: "gate:generated-sync"
+        run: |
+          if [ -z "$TAGS" ]; then
+            echo "::error::TAGS kosong — langkah ini akan meregenerasi nol berkas dan melapor hijau."
+            echo "Isi env TAGS di workflow ini dengan tag kontrak yang kode Go-nya digenerate."
+            exit 1
+          fi
+          for tag in $TAGS; do
+            make gen-go TAG="$tag"
+          done
+          git diff --exit-code
+
+      # Gate lapis backend: modul terpasang di titik masuk, buku besar dua arah, sumbu generasi,
+      # tabrakan nama parameter path, dan daftar periksa penyewa di modul yang sudah dibekukan.
+      - name: standard gate --lapis backend
+        run: standard gate --lapis backend
+
+      - name: build + test
+        working-directory: "{{BACKEND_DIR}}"
+        run: |
+          go build ./...
+          go test ./...

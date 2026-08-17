@@ -1,0 +1,79 @@
+# frontend-gate — gate lapis FRONTEND.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# PLACEHOLDER YANG WAJIB DIISI SAAT PEMASANGAN
+#
+#	{{NODE_VERSION}}    versi Node, mis. "24"
+#	{{PNPM_VERSION}}    versi pnpm, mis. "10.11.0"
+#	{{FRONTEND_DIR}}    layout.frontendDir dari standard.config.json
+#	{{CONTRACT_DIR}}    layout.contractDir dari standard.config.json
+#
+# Lalu buang akhiran `.template` dan taruh di `.github/workflows/`.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# APA YANG PAKET STANDAR BELUM PUNYA UNTUK LAPIS INI — baca sebelum menyalin
+#
+# `standard gate` TIDAK punya langkah lapis frontend, dan berkas ini sengaja TIDAK memanggilnya
+# dengan `--lapis frontend`: lapis itu tidak dikenal, jadi perintahnya keluar 2, bukan 0. Itu
+# perilaku yang benar — nol langkah tidak boleh terbaca sebagai lulus — tapi artinya langkah-langkah
+# di bawah adalah perintah PROYEK, bukan gate paket standar.
+#
+# Konsekuensinya untuk W-01 (frontend hanya memanggil klien generated), W-02 (disiplin queryKey),
+# dan W-03 (pemeriksa tipe penuh): ketiganya menyebut nama gate di kolom penegaknya, dan paket ini
+# belum memancarkan satu pun. `pnpm typecheck` di bawah adalah penegak sungguhan untuk W-03 selama
+# ia berjalan atas SELURUH proyek — pemeriksa tipe yang dijalankan atas sebagian berkas memulangkan
+# hitungan yang berupa LANTAI, bukan kebenaran.
+name: frontend-gate
+
+on:
+  pull_request:
+    paths:
+      - "{{FRONTEND_DIR}}/**"
+      - "{{CONTRACT_DIR}}/**"
+      - ".github/workflows/**"
+
+jobs:
+  frontend-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: placeholder template wajib sudah diisi
+        run: |
+          if grep -rEn '\{\{[A-Z_]+\}\}' .github/workflows/; then
+            echo "::error::masih ada placeholder {{...}} yang belum diisi di berkas workflow di atas."
+            echo "Placeholder di dalam blok paths: membuat workflow-nya TIDAK PERNAH TERPICU — hijau yang buta."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "{{PNPM_VERSION}}"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "{{NODE_VERSION}}"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: standard doctor
+        run: standard doctor
+
+      # Klien generated wajib SINKRON dengan kontrak: regenerasi, lalu tuntut diff kosong. Bentuk
+      # yang sama dengan `gate:generated-sync` di lapis backend, dan alasan yang sama — klien yang
+      # basi memanggil endpoint yang sudah berubah, dan tidak ada galat tipe yang menandainya
+      # sampai bentuk responsnya ikut berubah.
+      - name: klien generated sinkron dengan kontrak
+        run: |
+          pnpm run generate:client
+          git diff --exit-code
+
+      # Pemeriksa tipe PENUH, bukan sebagian: alias tulisan tangan yang rusak menutupi galat di
+      # situs hilirnya, jadi hitungan galat dari lari yang dipersempit adalah lantai, bukan
+      # kebenaran.
+      - name: typecheck penuh
+        working-directory: "{{FRONTEND_DIR}}"
+        run: pnpm typecheck
+
+      - name: build
+        working-directory: "{{FRONTEND_DIR}}"
+        run: pnpm build

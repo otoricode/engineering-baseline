@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+# Shim: satu-satunya entry point paket. Menjalankan CLI lewat tsx supaya tidak ada
+# langkah build antara mengedit sumber dan menjalankannya.
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+exec "$DIR/node_modules/.bin/tsx" "$DIR/src/cli-entry.ts" "$@"

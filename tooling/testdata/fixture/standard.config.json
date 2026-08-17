@@ -1,0 +1,36 @@
+{
+  "layout": { "contractDir": "packages/contract", "backendDir": "apps/api", "frontendDir": "apps/web" },
+  "go": {
+    "modulePath": "example.test/fixture/apps/api",
+    "genDir": "internal/gen",
+    "featureDir": "internal/feature",
+    "dtoconvPkg": "internal/platform/dtoconv",
+    "genSuffix": ".gen.go",
+    "entrypoint": "cmd/server/main.go",
+    "registrarType": "[]server.FeatureRegistrar{"
+  },
+  "contract": {
+    "bundle": "dist/openapi.bundled.yaml",
+    "sharedDir": "openapi/_shared",
+    "shared": {
+      "envelope": "envelope.yaml",
+      "permissions": "permissions.yaml",
+      "errors": "errors.yaml",
+      "publicOps": "public-operations.yaml"
+    },
+    "permissionSeeds": ["apps/api/internal/platform/seed/permissions.go"]
+  },
+  "ledgers": {
+    "envelopeOptIn": "envelope-opt-in.json",
+    "mountedModules": "mounted-modules.json",
+    "routes": "routes.json",
+    "coverage": "coverage.json"
+  },
+  "emit": {
+    "permissions": "apps/web/src/generated/permissions.ts",
+    "errorCodes": "apps/web/src/generated/errorCodes.ts"
+  },
+  "idempotency": { "uuidNamespace": "06b5be72-b935-475a-b8f8-f0bd98e91039" },
+  "rules": { "docBase": "docs/rules", "prefix": { "contract": "C", "backend": "B", "gate": "G", "tenancy": "T" } },
+  "language": "id"
+}

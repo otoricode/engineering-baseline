@@ -1,0 +1,8 @@
+package: common
+generate:
+  models: true
+output-options:
+  # Dokumen sumbernya (dist/openapi.shared.yaml, dari gen-shared-spec.ts) sengaja `paths: {}` —
+  # nol operasi merujuk schema-nya, jadi pemangkasan bawaan oapi-codegen akan membuang SEMUANYA
+  # tanpa ini.
+  skip-prune: true

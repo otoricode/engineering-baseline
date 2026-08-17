@@ -1,0 +1,21 @@
+# Workflow backend-gate TERPASANG — lihat catatan di `contract-gate.yml` di direktori ini.
+#
+# `paths:` memuat DUA direktori layout: backend dan kontrak. Yang kedua bukan kelebihan — gate lapis
+# backend membaca kontrak, jadi perubahan kontrak saja bisa memerahkannya, dan gate yang tidak
+# terpicu untuk perubahan yang bisa memerahkannya adalah gate yang hijau karena tidak berjalan.
+name: backend-gate
+
+on:
+  pull_request:
+    paths:
+      - "apps/api/**"
+      - "packages/contract/**"
+      - ".github/workflows/**"
+
+jobs:
+  backend-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: standard doctor
+        run: standard doctor

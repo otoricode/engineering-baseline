@@ -1,0 +1,6 @@
+# Katalog permission TERTUTUP (C-03 butir 5). Nama baru wajib pola <DOMAIN>_<AKSI>;
+# nama warisan yang melanggar pola didaftar di legacyNames, terpisah.
+permissions:
+  - CONTOH_READ
+  - CONTOH_CREATE
+legacyNames: []

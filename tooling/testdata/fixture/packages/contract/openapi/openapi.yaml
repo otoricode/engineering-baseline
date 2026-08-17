@@ -1,0 +1,213 @@
+openapi: 3.0.3
+info:
+  title: Fixture — proyek contoh
+  version: 1.0.0
+  description: >-
+    Proyek fixture untuk `standard doctor`/`standard verify`/`standard gate`. Bukan proyek
+    produksi — tiga operasi di satu tag, cukup untuk melatih pipa generasi (gen dto, gen module)
+    DAN seluruh gate lapis kontrak/backend atas sebuah kontrak yang benar-benar berbentuk seperti
+    kontrak nyata: envelope bersama, permission per operasi, satu operasi berpaginasi, dan satu
+    operasi by-ID (yang justru kelas paling rawan bocor lintas-penyewa — T-02/T-05/T-07).
+servers:
+  - url: /api
+tags:
+  - name: contoh
+    description: >-
+      Tag contoh — daftar berpaginasi + ambil-satu-by-ID + buat, dipakai sebagai fixture
+      standard verify/gate.
+paths:
+  /contoh:
+    get:
+      operationId: getContoh
+      tags: [contoh]
+      summary: Daftar contoh, berpaginasi
+      security:
+        - bearerAuth: []
+      x-permission: CONTOH_READ
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Daftar contoh.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeSuccess"
+                  - type: object
+                    required: [data, metaData]
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/Contoh"
+                      metaData:
+                        $ref: "#/components/schemas/ContohMetaData"
+        "401":
+          description: Belum terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "403":
+          description: Terautentikasi tapi tak berhak.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+    post:
+      operationId: postContoh
+      tags: [contoh]
+      summary: Buat contoh baru
+      security:
+        - bearerAuth: []
+      x-permission: CONTOH_CREATE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContohCreateRequest"
+      responses:
+        "201":
+          description: Contoh dibuat.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeSuccess"
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Contoh"
+        "400":
+          description: Validasi gagal.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "401":
+          description: Belum terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "403":
+          description: Terautentikasi tapi tak berhak.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "409":
+          description: Nama sudah dipakai.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+  /contoh/{contohId}:
+    get:
+      operationId: getContohById
+      tags: [contoh]
+      summary: Ambil satu contoh lewat ID
+      security:
+        - bearerAuth: []
+      x-permission: CONTOH_READ
+      parameters:
+        - name: contohId
+          in: path
+          required: true
+          # TANPA `format: uuid` di sini (beda dari `Contoh.id` di badan respons) — sengaja: ini
+          # yang membuat oapi-codegen memancarkan tanda tangan store `(ctx, contohId string)`,
+          # bentuk yang genmodule.checklistTenancy() kenali sebagai lookup-by-ID dan pancarkan
+          # daftar periksa lintas-penyewanya (T-02/T-05/T-07). `openapi_types.UUID` (kalau
+          # format:uuid dipasang) valid juga di dunia nyata, tapi genmodule hanya mengenali
+          # `string` literal — mengetatkan validasi ID di sini membeli validasi format dengan
+          # harga MEMATIKAN pemancar checklist, jadi trade-off ini disengaja untuk fixture.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Satu contoh.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeSuccess"
+                  - type: object
+                    required: [data]
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/Contoh"
+        "401":
+          description: Belum terautentikasi.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "403":
+          description: Terautentikasi tapi tak berhak.
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+        "404":
+          description: >-
+            Tidak ditemukan — baik memang tidak ada, maupun milik penyewa lain (T-05: 403 di
+            sini akan JADI existence oracle lintas-penyewa, jadi dilarang).
+          content:
+            application/json:
+              schema:
+                $ref: "_shared/envelope.yaml#/components/schemas/EnvelopeError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    Contoh:
+      type: object
+      required: [id, nama, dibuatPada]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nama:
+          type: string
+        dibuatPada:
+          type: string
+          format: date-time
+    ContohCreateRequest:
+      type: object
+      description: Badan permintaan — field opsional memakai *optional*, TIDAK PERNAH nullable (C-04).
+      required: [nama]
+      properties:
+        nama:
+          type: string
+          minLength: 1
+          maxLength: 120
+    # Pembungkus metaData PER-TAG, bukan `_shared/envelope.yaml#/EnvelopeMeta` — konvensi proyek
+    # asal (Task 13 fix round 5): hanya `Pagination` yang benar-benar bersama; pembungkusnya
+    # sendiri (nama Go-nya) hidup satu per tag. `EnvelopeMeta` bersama TETAP ada di envelope.yaml
+    # untuk operasi yang metaData-nya generik/opsional — tag ini punya wrapper sendiri karena
+    # metaData-nya WAJIB dan berbentuk spesifik (cuma `pagination`).
+    ContohMetaData:
+      type: object
+      required: [pagination]
+      properties:
+        pagination:
+          $ref: "_shared/envelope.yaml#/components/schemas/Pagination"

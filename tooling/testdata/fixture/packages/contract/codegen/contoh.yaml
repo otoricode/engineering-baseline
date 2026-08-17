@@ -1,0 +1,20 @@
+package: contoh
+generate:
+  models: true
+  gin-server: true
+  strict-server: true
+output-options:
+  skip-prune: true
+  # Schema envelope BERSAMA (dibangkitkan sekali di paket `common`, lihat codegen/common.yaml)
+  # dikecualikan dari generasi per-tag di sini — konvensi proyek asal (Task 13 fix round 5).
+  # Tanpa ini, paket generated tag ini punya DUA deklarasi untuk nama yang sama (satu lokal di
+  # sini, satu alias ke `common` dari `gen wiring`), dan Go menolaknya sebagai duplicate
+  # declaration. `ContohMetaData` (pembungkus metaData tag ini) SENGAJA TIDAK ada di daftar ini —
+  # ia per-tag, bukan bersama; lihat komentar di openapi.yaml.
+  exclude-schemas:
+    - EnvelopeStatus
+    - EnvelopeErrorStatus
+    - EnvelopeSuccess
+    - EnvelopeError
+    - EnvelopeMeta
+    - Pagination

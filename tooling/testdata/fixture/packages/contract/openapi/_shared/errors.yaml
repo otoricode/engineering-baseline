@@ -1,0 +1,9 @@
+# Katalog kode error TERTUTUP, dua lapis (C-02): generik lintas domain, dan spesifik
+# domain berpola <DOMAIN>_<ALASAN>.
+generic:
+  - VALIDATION_ERROR
+  - UNAUTHENTICATED
+  - FORBIDDEN
+  - CONFLICT
+domain:
+  - CONTOH_NAMA_DUPLIKAT

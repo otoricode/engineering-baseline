@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: shared components
+  version: 1.0.0
+  description: Dokumen turunan — JANGAN diedit. Dibangkitkan dari berkas envelope
+    kontrak dan bundelnya.
+paths: {}
+components:
+  schemas:
+    EnvelopeStatus:
+      type: string
+      description: Status envelope sukses — nilai tunggal, dan itu disengaja (lihat C-01).
+      enum:
+        - success
+    EnvelopeErrorStatus:
+      type: string
+      description: Status envelope gagal — nilai tunggal, terpisah dari EnvelopeStatus.
+      enum:
+        - failed
+    EnvelopeSuccess:
+      type: object
+      description: Bentuk sukses TUNGGAL untuk seluruh respons JSON (C-01). Operasi
+        menggabungkannya lewat allOf dan menambahkan bentuk `data` miliknya
+        sendiri di bagian kedua.
+      required:
+        - status
+        - message
+        - data
+      properties:
+        status:
+          $ref: "#/components/schemas/EnvelopeStatus"
+        message:
+          type: string
+          description: Kalimat untuk manusia, bukan untuk cabang logika klien.
+        data: {}
+        metaData:
+          $ref: "#/components/schemas/EnvelopeMeta"
+    EnvelopeError:
+      type: object
+      description: Bentuk gagal TUNGGAL untuk seluruh respons JSON (C-01). Tidak ada
+        `data` di sini — itu mutlak, bukan detail.
+      required:
+        - status
+        - code
+        - message
+      properties:
+        status:
+          $ref: "#/components/schemas/EnvelopeErrorStatus"
+        code:
+          type: string
+          description: Kode dari katalog tertutup (C-02) — bukan teks bebas.
+        message:
+          type: string
+        errors:
+          type: array
+          description: Hanya muncul pada respons validasi.
+          items:
+            type: object
+            required:
+              - field
+              - message
+            properties:
+              field:
+                type: string
+                description: Jalur field, notasi titik/kurung — string, bukan larik.
+              message:
+                type: string
+    Pagination:
+      type: object
+      description: Komponen paginasi BERSAMA — satu bentuk untuk seluruh operasi list.
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+    EnvelopeMeta:
+      type: object
+      description: metaData membawa HANYA paginasi (C-01) — field kedua apa pun dilarang.
+      required:
+        - pagination
+      properties:
+        pagination:
+          $ref: "#/components/schemas/Pagination"

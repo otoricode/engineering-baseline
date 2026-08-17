@@ -1,0 +1,220 @@
+# Makefile.template — salin ke akar proyek target sebagai `Makefile` (atau `include` dari
+# Makefile yang sudah ada), lalu isi blok variabel di bawah.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SATU PERMUKAAN
+#
+# Setiap target di sini memanggil subperintah `standard`, bukan biner alat langsung. Itu bukan
+# selera: letak alat, direktori kerjanya, dan letak config yang harus dibacanya adalah detail yang
+# BERUBAH — dan setiap pemanggil yang menyalin detail itu adalah satu tempat lagi yang harus ikut
+# berubah. Yang terlewat tidak gagal nyaring; ia memanggil alat dengan config yang salah dan tetap
+# keluar 0.
+#
+# Satu-satunya pengecualian ada di `gen-go`, dan alasannya disebutkan di targetnya.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# DRY-RUN ADALAH DEFAULT — DENGAN SATU PENGECUALIAN YANG DINAMAI
+#
+# Target generasi TIDAK menulis apa pun sampai `APPLY=--apply` diberikan:
+#
+#	make gen-module TAG=buku-tamu PKG=bukutamu              # laporkan rencananya
+#	make gen-module TAG=buku-tamu PKG=bukutamu APPLY=--apply # tulis
+#
+# Itu yang membuat target-target ini aman dipanggil agen yang belum membaca keluarannya.
+#
+# `gen-go` ADALAH PENGECUALIANNYA, dan ia satu-satunya: ia memanggil `oapi-codegen` langsung, dan
+# alat itu tidak punya dry-run. `make gen-go TAG=x` MENULIS — dengan atau tanpa APPLY. Karena itu
+# prasyaratnya (`gen-common-apply`) juga selalu menulis: prasyarat keras yang dijalankan dry-run
+# sementara langkah utamanya menulis adalah prasyarat yang dilewati tanpa suara, dan `gen-go` yang
+# berhasil membuatnya tak terlihat. Lihat targetnya untuk alasan lengkapnya.
+
+# ── Variabel yang WAJIB diisi saat pemasangan ────────────────────────────────
+#
+# Ketiganya wajib SAMA dengan `standard.config.json`; `standard doctor` yang membuktikannya, dan
+# target `doctor` di bawah adalah langkah pertama tiap workflow CI justru karena itu.
+BACKEND_DIR  ?= apps/api
+CONTRACT_DIR ?= packages/contract
+BUNDLE       ?= $(CONTRACT_DIR)/dist/openapi.bundled.yaml
+
+# Letak shim `standard`. Bawaannya mengandaikan ia ada di PATH (mis. lewat bin paket); kalau paket
+# standar disalin ke dalam repo, arahkan ke shim-nya:
+#
+#	make gate STANDARD=tools/engineering-baseline/bin/standard
+STANDARD ?= standard
+
+# Berkas config oapi-codegen per tag. Konvensinya boleh berbeda per proyek — yang tidak boleh
+# berbeda adalah bahwa versinya datang dari direktif `tool` di go.mod (lihat `gen-go`).
+OAPI_CONFIG ?= $(CONTRACT_DIR)/codegen/$(TAG).yaml
+
+# Berkas yang `gen-go` TULIS, relatif terhadap $(BACKEND_DIR) (resepnya `cd` ke sana lebih dulu).
+# Wajib berada di bawah direktori generated yang `standard.config.json` sebut di `go.genDir` —
+# `go build ./internal/gen/...` di akhir `gen-go`, dan `gate:generated-sync`, keduanya menunjuk
+# pohon itu. Bawaannya mengikuti fixture paket ini (`internal/gen/<tag>/<tag>.gen.go`).
+OAPI_OUT ?= internal/gen/$(TAG)/$(TAG).gen.go
+
+# Diteruskan apa adanya ke alat di bawahnya. Kosong = dry-run.
+APPLY ?=
+
+# ── Penjaga ──────────────────────────────────────────────────────────────────
+#
+# Variabel yang kosong TIDAK boleh mengalir ke perintah: `-tag ""` bukan galat bagi alatnya, ia
+# hanya menghasilkan pekerjaan atas tag bernama kosong lalu keluar 0. Yang kosong dihentikan di
+# sini, dengan contoh pemakaian yang bisa disalin.
+wajib = $(if $(strip $($(1))),,$(error $(1) wajib diisi — contoh: make $(2)))
+
+# `standard` yang tidak ditemukan harus berbunyi sebagai KEGAGALAN PEMASANGAN, bukan sebagai
+# "command not found" yang terbaca seperti salah ketik target.
+.PHONY: periksa-standard
+periksa-standard:
+	@command -v $(STANDARD) >/dev/null 2>&1 || test -x $(STANDARD) || { \
+		echo "standard tidak ditemukan di '$(STANDARD)'."; \
+		echo "Pasang paket standar lalu arahkan variabel STANDARD ke shim-nya:"; \
+		echo "  make <target> STANDARD=tools/engineering-baseline/bin/standard"; \
+		exit 2; }
+
+.DEFAULT_GOAL := help
+
+.PHONY: help
+help:
+	@echo "target:"
+	@echo "  doctor         config vs repo nyata"
+	@echo "  gen-common     katalog permission, katalog kode error, dokumen schema bersama"
+	@echo "  gen-go         kode server Go dari kontrak (go tool oapi-codegen)   [TAG]"
+	@echo "  gen-wiring     wiring rute + manifest isi untuk satu tag            [TAG PKG]"
+	@echo "  gen-dto        cermin dto privat per fitur"
+	@echo "  gen-module     kerangka modul feature (register/handler/service/repository) [TAG PKG]"
+	@echo "  freeze-module  akhiri masa regenerasi sebuah modul                  [PKG]"
+	@echo "  gate           seluruh gate; gate-contract / gate-backend per lapis"
+	@echo ""
+	@echo "dry-run adalah default. Tambahkan APPLY=--apply untuk benar-benar menulis."
+	@echo "KECUALI gen-go: ia memanggil oapi-codegen (tanpa dry-run) dan SELALU menulis,"
+	@echo "berikut prasyaratnya gen-common-apply."
+
+.PHONY: doctor
+doctor: periksa-standard
+	$(STANDARD) doctor
+
+.PHONY: gen-common
+gen-common: periksa-standard
+	$(STANDARD) gen common $(APPLY)
+
+# Sama dengan `gen-common`, tapi SELALU menulis — dan ia ada HANYA untuk dipakai `gen-go`.
+#
+# Kenapa target kembar kecil ini lebih baik daripada `gen-go: gen-common`: `gen-go` MENULIS tanpa
+# syarat (`oapi-codegen` tidak punya dry-run), sementara `gen-common` menghormati `$(APPLY)`.
+# Digabungkan apa adanya, `make gen-go TAG=x` tanpa APPLY menjalankan prasyaratnya dalam DRY-RUN —
+# nol berkas ditulis — lalu tetap memancarkan paket tag-nya. Prasyarat KERAS yang dilewati, dan
+# dilewatinya SENYAP karena perintahnya berhasil. Itu menggigit tepat saat pemasangan, saat
+# pemakainya nol konteks.
+#
+# Dua jalan keluar, dan yang ini yang dipilih: keduanya MENULIS. Alternatifnya (keduanya dry-run)
+# menuntut `gen-go` berhenti menulis tanpa APPLY, dan itu memutus langkah `gate:generated-sync` di
+# `backend-gate.yml`, yang memanggil `make gen-go` justru UNTUK meregenerasi lalu menuntut diff
+# kosong.
+.PHONY: gen-common-apply
+gen-common-apply: periksa-standard
+	$(STANDARD) gen common --apply
+
+# `go tool oapi-codegen`, BUKAN `go run <modul>@versi` — dan ini satu-satunya target yang memanggil
+# biner langsung, karena config codegen adalah milik PROYEK (satu berkas per tag) dan paket standar
+# tidak punya subperintah untuknya.
+#
+# Alasan bentuknya, dan ia bukan gaya penulisan: `go tool` memakai versi yang dipaku direktif `tool`
+# di go.mod, jadi setiap mesin memancarkan keluaran yang SAMA. `go run <modul>@versi` mengambil apa
+# pun yang kebetulan tersedia — versi yang berbeda memancarkan berkas yang berbeda untuk kontrak
+# yang identik, dan yang gagal berikutnya adalah gate diff-kosong (`gate:generated-sync`), yang lalu
+# merah karena alasan yang sepenuhnya salah. Orang yang membacanya akan mencari perubahan kontrak
+# yang tidak pernah ada.
+#
+# `gen-common` PRASYARAT KERAS, bukan saran (Task 13 fix round 5). `gen wiring` (lihat SKILL.md)
+# mengalias schema envelope BERSAMA ke paket `common` alih-alih menuliskannya ulang per tag —
+# konvensi proyek asal. Kalau config codegen tag ini memakai `output-options.exclude-schemas`
+# (lihat catatan di bawah), generasinya BENAR secara sintaks bahkan kalau `gen-common` belum
+# pernah jalan (oapi-codegen tidak tahu ataupun peduli paket `common` ada atau tidak) — tapi
+# `dist/openapi.shared.yaml` (satu-satunya sumber untuk paket `common` itu sendiri, lihat target
+# `gen-go TAG=common` di bawah) HANYA ditulis `gen-common`. Diukur: tanpa prasyarat ini, proyek
+# yang mengikuti template ini apa adanya menabrak "Pagination redeclared" begitu tag KEDUA yang
+# memakai `exclude-schemas` dibangkitkan tanpa `gen-common` pernah dijalankan lebih dulu.
+#
+# `EXCLUDE_SCHEMAS` KOSONG bawaannya (kosong = generate SEMUA schema lokal, tanpa berbagi apa
+# pun — pilihan yang aman kalau proyekmu belum mengadopsi wiring bersama). Proyek yang MENGADOPSI
+# `gen wiring` (dan karena itu `shared.gen.go`-nya) WAJIB mengecualikan nama-nama yang SAMA di
+# konfigurasi codegen PER-TAG (`output-options.exclude-schemas`, lihat contoh di
+# `tooling/testdata/fixture/packages/contract/codegen/contoh.yaml`) — kalau tidak, paket generated
+# tag itu punya DUA deklarasi untuk nama yang sama (satu lokal dari `gen-go`, satu alias dari
+# `gen wiring`), dan Go menolaknya sebagai duplicate declaration. Daftar nama yang harus
+# dikecualikan SAMA dengan `components.schemas` di berkas envelope bersama (`contract.shared.envelope`
+# di `standard.config.json`) — `gen-common` mencetak daftarnya ("schema bersama: ...") persis untuk
+# disalin ke situ.
+#
+# Metadata WAJIB (`required: true`) yang membawa paginasi TETAP per-tag (jangan pakai schema
+# envelope `EnvelopeMeta` bersama untuk itu) — `genmodule` (`gen module`) membaca tipe metaData dari
+# PAKET GENERATED TAG ITU SENDIRI dan tidak mengikuti alias lintas paket ke `common`; metaData yang
+# dialiaskan membuat `gen module` menolak regenerasi dengan pesan "bukan lagi struct { Pagination
+# ... }". Contoh bentuk yang benar (schema `<Tag>MetaData` lokal, HANYA membungkus `Pagination`
+# BERSAMA) ada di `tooling/testdata/fixture/packages/contract/openapi/openapi.yaml`.
+#
+# Paket `common` ITU SENDIRI (tempat nama-nama di `exclude-schemas` benar-benar tinggal) dibangkitkan
+# lewat TARGET INI JUGA — bukan target terpisah — dengan `TAG=common` dan `BUNDLE` diarahkan ke
+# dokumen schema-bersama yang `gen-common` tulis (bukan bundel tag biasa):
+#
+#	make gen-go TAG=common BUNDLE=$(CONTRACT_DIR)/dist/openapi.shared.yaml
+#
+# `OAPI_CONFIG` otomatis ikut jadi `$(CONTRACT_DIR)/codegen/common.yaml` lewat bawaan `$(TAG)` di
+# atas — tidak perlu disebut ulang. Config itu WAJIB `output-options.skip-prune: true`: dokumen
+# sumbernya sengaja `paths: {}` (nol operasi merujuk schema-nya), dan tanpa `skip-prune` generator
+# memangkas SEMUANYA. Lihat `tooling/testdata/fixture/packages/contract/codegen/common.yaml`.
+#
+# Dua baris di resep ini disalin dari Makefile proyek asal dan keduanya WAJIB, bukan hiasan:
+#
+#   `-o $(OAPI_OUT)`  tanpa bendera ini oapi-codegen memancarkan berkasnya ke STDOUT. Resepnya
+#                     tetap keluar 0, tidak satu berkas pun berubah, dan `make gen-go` terbaca
+#                     sebagai langkah yang menghasilkan kode padahal ia cuma mencetak. Semua yang
+#                     berdiri di atasnya (`gen wiring`, `gen module`, `gen dto` — ketiganya
+#                     MEMBACA paket generated) lalu bekerja atas paket generated yang LAMA.
+#   `go build ./internal/gen/...`  generasi yang berhasil ditulis tapi tidak bisa dikompilasi
+#                     (mis. dua deklarasi untuk nama yang sama — lihat catatan `exclude-schemas`
+#                     di atas, kelas kegagalan yang SUDAH pernah terjadi) tidak berbunyi sampai
+#                     ada yang kebetulan membangun backend. Ini menariknya ke langkah yang
+#                     membuatnya.
+.PHONY: gen-go
+gen-go: gen-common-apply
+	$(call wajib,TAG,gen-go TAG=buku-tamu)
+	mkdir -p $(BACKEND_DIR)/$(dir $(OAPI_OUT))
+	cd $(BACKEND_DIR) && go tool oapi-codegen -config $(abspath $(OAPI_CONFIG)) -o $(OAPI_OUT) $(abspath $(BUNDLE))
+	cd $(BACKEND_DIR) && go build ./internal/gen/...
+
+.PHONY: gen-wiring
+gen-wiring: periksa-standard
+	$(call wajib,TAG,gen-wiring TAG=buku-tamu PKG=bukutamu)
+	$(call wajib,PKG,gen-wiring TAG=buku-tamu PKG=bukutamu)
+	$(STANDARD) gen wiring --tag $(TAG) --pkg $(PKG) $(APPLY)
+
+.PHONY: gen-dto
+gen-dto: periksa-standard
+	$(STANDARD) gen dto $(APPLY)
+
+# FEATURE opsional: bawaannya sama dengan PKG. Ia disebut di sini supaya proyek yang nama direktori
+# fiturnya berbeda dari nama paket generated-nya tidak perlu menebak dari mana meneruskannya.
+.PHONY: gen-module
+gen-module: periksa-standard
+	$(call wajib,TAG,gen-module TAG=buku-tamu PKG=bukutamu [FEATURE=tamu])
+	$(call wajib,PKG,gen-module TAG=buku-tamu PKG=bukutamu [FEATURE=tamu])
+	$(STANDARD) gen module --tag $(TAG) --pkg $(PKG) $(if $(strip $(FEATURE)),--feature $(FEATURE),) $(APPLY)
+
+.PHONY: freeze-module
+freeze-module: periksa-standard
+	$(call wajib,PKG,freeze-module PKG=bukutamu [FEATURE=tamu])
+	$(STANDARD) freeze --pkg $(PKG) $(if $(strip $(FEATURE)),--feature $(FEATURE),) $(APPLY)
+
+.PHONY: gate
+gate: periksa-standard
+	$(STANDARD) gate
+
+.PHONY: gate-contract
+gate-contract: periksa-standard
+	$(STANDARD) gate --lapis contract
+
+.PHONY: gate-backend
+gate-backend: periksa-standard
+	$(STANDARD) gate --lapis backend

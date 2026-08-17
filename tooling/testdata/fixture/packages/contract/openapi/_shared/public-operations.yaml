@@ -1,0 +1,3 @@
+# Buku besar operasi publik (C-03 butir 1) — operasi dengan `security: []` eksplisit wajib
+# terdaftar di sini, dua arah. Kosong: kedua operasi tag `contoh` mensyaratkan autentikasi.
+publicOperations: []

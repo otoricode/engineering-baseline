@@ -1,0 +1,26 @@
+# Workflow contract-gate TERPASANG — salinan `ci/contract-gate.yml.template` dengan placeholder
+# yang sudah diisi dari `standard.config.json` fixture ini.
+#
+# Ia ada di fixture supaya pemeriksaan `paths:` vs `layout.*` di `standard doctor` benar-benar
+# BERJALAN atas berkas sungguhan setiap kali `standard verify` jalan (tahap 3 dan tahap 5), bukan
+# cuma di uji satuan. Fixture yang tidak punya workflow membuat pemeriksaan itu memulangkan nol
+# tanpa satu pun tanda bahwa ia tidak berjalan.
+#
+# Langkah-langkahnya sengaja dipangkas: yang diperiksa dari berkas ini hanya `name:` dan blok
+# `paths:`. Isi resepnya diikat oleh `src/templat.test.ts` atas TEMPLATE-nya, bukan atas salinan
+# ini.
+name: contract-gate
+
+on:
+  pull_request:
+    paths:
+      - "packages/contract/**"
+      - ".github/workflows/**"
+
+jobs:
+  contract-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: standard doctor
+        run: standard doctor
