@@ -14,20 +14,32 @@ di dalamnya (rekomendasi: `<proyek>/standards/engineering-baseline`).
 
 ## 0. Sebelum mulai — prasyarat yang tidak bisa ditawar
 
-Ada tiga kelompok, dan ketiganya **asumsi**: paket ini tidak bisa memeriksanya untukmu, dan kalau
-salah satunya tidak terpenuhi kau akan menemukannya sebagai galat kompilasi, bukan sebagai gate
-merah yang menjelaskan diri.
+Ada tiga kelompok, dan **derajat penjagaannya berbeda** — bacalah bedanya, karena ia menentukan
+kapan kau tahu sesuatu kurang:
+
+| Kelompok | Dijaga apa | Kapan kau tahu |
+|---|---|---|
+| **0.1** toolchain | `standard doctor` (Go), `bin/standard` (dependensi paket) | segera, exit bukan-nol beserta kalimat yang menyebut alatnya |
+| **0.2** tumpukan Go yang diandaikan generator | `standard verify` tahap 6 (daftar prasyaratnya, dua arah) | saat kau menyunting generator; bukan saat memasang |
+| **0.3** empat paket platform | **tidak ada** | saat kode hasilnya gagal kompilasi |
+
+Yang **tidak** dijaga adalah kelompok ketiga, dan itulah satu-satunya yang akan menemuimu sebagai
+galat kompilasi alih-alih sebagai gate merah yang menjelaskan diri.
 
 ### 0.1 Toolchain
 
-| Alat | Untuk apa |
-|---|---|
-| Node + pnpm | `bin/standard` adalah CLI TypeScript; **seluruh** subperintah menuntutnya, termasuk gate lapis backend |
-| Go | kedua alat generator (`genmodule`, `gendto`) dan `go tool oapi-codegen` |
-| `git`, `make` | template Makefile dan gate diff-kosong |
+| Alat | Untuk apa | Yang memerah kalau ia tak ada |
+|---|---|---|
+| Node + pnpm | `bin/standard` adalah CLI TypeScript; **seluruh** subperintah menuntutnya, termasuk gate lapis backend | `bin/standard` sendiri, exit 2 |
+| `go` **dan** `gofmt` | kedua alat generator (`genmodule`, `gendto`) dan `go tool oapi-codegen` | `standard doctor`, exit 1 — kalau `layout.backendDir` memuat `go.mod` |
+| `git`, `make` | template Makefile dan gate diff-kosong | tidak ada; kegagalannya muncul saat target Makefile dijalankan |
 
 Jalankan `pnpm install` **di dalam folder paket** setelah menyalinnya — `bin/standard` mencari
 `node_modules/.bin/tsx` relatif terhadap dirinya sendiri, bukan relatif terhadap proyekmu.
+
+`gofmt` disebut TERPISAH dari `go`, dan itu bukan kelebihan: toolchain Go yang terpasang sebagian
+nyata, dan `gofmt` yang hilang sendirian menjatuhkan skrip kontrak sementara `go version` menjawab
+dengan riang. `doctor` memeriksa keduanya satu per satu.
 
 ### 0.2 Tumpukan Go yang diandaikan generator
 
@@ -586,3 +598,18 @@ Bedanya penting: `doctor` dan `gate` memeriksa **proyekmu**; `verify` memeriksa 
 enam tahap, termasuk menjalankan seluruh pipa generator atas proyek fixture dan membandingkannya
 dengan berkas golden. Kalau `verify` merah sesudah kau menyunting sesuatu di dalam folder paket,
 yang rusak adalah standarnya, bukan proyekmu.
+
+**Apa yang `doctor` benar-benar periksa**, supaya hijaunya tidak kau baca lebih luas daripada yang
+ia klaim: keberadaan dan jenis tiap jalur yang config tunjuk; `go.mod` backend cocok dengan
+`go.modulePath`; `idempotency.uuidNamespace` sudah diisi; blok `paths:` workflow terpasang cocok
+dengan `layout.*`; dan — **kalau `layout.backendDir` memuat `go.mod`** — `go` beserta `gofmt`
+benar-benar bisa diresolusi di PATH.
+
+Yang terakhir itu ada karena hijau yang salah pernah terukur: di mesin tanpa toolchain Go, `doctor`
+DAN `gate` sama-sama keluar 0, dan yang pertama berbunyi merah barulah `verify` — sesudah pemakainya
+percaya pemasangannya terbukti benar. `doctor` tidak boleh menyatakan sehat atas pemasangan yang
+tidak bisa menjalankan separuh perintahnya.
+
+Proyek **tanpa** `go.mod` di `layout.backendDir` tidak dituntut punya toolchain Go: pemeriksaan itu
+dipicu oleh kenyataan di disk, bukan oleh blok `go` di config — yang wajib ada bagi semua orang,
+termasuk yang tidak memakai Go sama sekali.

@@ -6,6 +6,7 @@
   "doctor.path_bukan_berkas": "{kunci} menunjuk {jalur}, tapi itu bukan berkas.",
   "doctor.path_tak_terbaca": "{kunci} menunjuk {jalur}, tapi tidak bisa diperiksa: {sebab}.",
   "doctor.module_beda": "go.modulePath {config} tidak cocok dengan go.mod {nyata}.",
+  "doctor.toolchain_go_hilang": "{alat} tidak bisa diresolusi di PATH, padahal {jalur} menandai proyek ini memakai lapis Go. Akibatnya: `standard gen module`, `standard gen dto`, dan `make gen-go` akan keluar 2 di mesin ini — bukan karena kontrak atau kodemu salah, tapi karena alatnya tidak pernah bisa dijalankan. Pasang toolchain Go, lalu pastikan {alat} ada di PATH.",
   "doctor.namespace_contoh": "idempotency.uuidNamespace masih nilai contoh. Cetak namespace proyek ini sendiri.",
   "doctor.sehat": "config sehat: {jumlah} pemeriksaan lulus.",
   "doctor.workflow_tak_terurai": "{jalur} bukan YAML yang sah, jadi blok paths-nya TIDAK diperiksa: {sebab}",

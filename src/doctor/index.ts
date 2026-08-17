@@ -1,10 +1,51 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { constants } from "node:fs";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
 import { NAMESPACE_BELUM_DIISI, type StandardConfig } from "../config/schema.js";
 import { msg, muatPesan, type Pesan } from "../messages/index.js";
 
 export type HasilDoctor = { temuan: string[]; jumlahPemeriksaan: number };
+
+/**
+ * Alat toolchain Go yang lapis Go tuntut ada.
+ *
+ * Diperiksa TERPISAH, bukan `gofmt` diandaikan ikut `go`: diukur di mesin steril, `gofmt` gagal
+ * SENDIRIAN (`spawnSync gofmt ENOENT`) di jalur skrip kontrak sementara `go` ada. Toolchain Go yang
+ * terpasang sebagian bukan hipotesis, dan andaian "kalau `go` ada, `gofmt` pasti ada" akan membuat
+ * separuh kegagalannya lolos.
+ */
+const ALAT_GO = ["go", "gofmt"] as const;
+
+/**
+ * Apakah sebuah alat bisa DIRESOLUSI di PATH — bukan apakah ia berjalan benar.
+ *
+ * Resolusi PATH, bukan `spawnSync`: yang `doctor` tanyakan adalah "apakah pemasangannya lengkap",
+ * dan menjalankan alat asing untuk menjawabnya menukar satu pertanyaan dengan pertanyaan lain —
+ * alat yang ADA tapi menggantung akan membuat `doctor` ikut menggantung, dan `doctor` adalah
+ * perintah pertama yang orang jalankan.
+ *
+ * Bit eksekusi ikut dituntut (`X_OK`), bukan cuma keberadaan berkas: berkas bernama `go` yang tidak
+ * bisa dieksekusi memenuhi "ada" tapi tidak memenuhi "bisa dijalankan", dan yang kedua itu yang
+ * menentukan apakah `gen module` akan bekerja.
+ *
+ * `daftarPath` diteruskan sebagai ARGUMEN alih-alih dibaca dari `process.env` di sini: uji
+ * memalsukan PATH lewat subproses (pola `buatGoPalsu`), dan fungsi yang membaca lingkungan global
+ * sendiri hanya bisa diuji dengan mengubah lingkungan proses ujinya — yang bocor ke berkas uji lain
+ * di worker yang sama.
+ */
+async function bisaDiresolusi(nama: string, daftarPath: string): Promise<boolean> {
+  for (const dir of daftarPath.split(path.delimiter)) {
+    if (dir === "") continue;
+    try {
+      await access(path.join(dir, nama), constants.X_OK);
+      return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
+}
 
 export const DIR_WORKFLOW = path.join(".github", "workflows");
 
@@ -232,6 +273,33 @@ export async function jalankanDoctor(
           sebab: (e as NodeJS.ErrnoException).code ?? String(e),
         }),
       );
+    }
+
+    /**
+     * Toolchain Go, dan pemicunya adalah `go.mod` YANG BARUSAN DITEMUKAN — bukan blok `go` di
+     * config.
+     *
+     * Blok `go` WAJIB ada di `config.schema.json`, jadi konsumen contract-only pun memilikinya;
+     * memakainya sebagai pemicu akan memerahkan orang yang tidak butuh Go sama sekali. Sinyal yang
+     * benar-benar membedakan adalah kenyataan di disk, dan pemeriksaannya sudah dilakukan tepat di
+     * atas ini — jadi ia DIPAKAI ULANG lewat cabang `if` yang sama, bukan diturunkan kedua kalinya
+     * lewat jalur yang bisa menyimpang darinya.
+     *
+     * Cacat yang melahirkannya, diukur di mesin dengan lingkungan disterilkan (`env -i`, PATH tanpa
+     * direktori Go): `standard doctor` keluar 0 dan mencetak "config sehat", `standard gate` keluar
+     * 0 juga, dan `standard verify` baru keluar 2 dengan `spawn go ENOENT`. `INSTALL.md` §10
+     * menamai `doctor` sebagai cara membuktikan pemasangan benar — jadi pemakainya dapat hijau,
+     * mempercayainya, lalu meledak di `make gen-go` pertama. Yang salah bukan kegagalan `verify`
+     * (ia justru benar: keluar 2, menyebut alatnya, menolak berpura-pura memeriksa), melainkan
+     * `doctor` yang menyatakan sehat atas pemasangan yang tidak bisa menjalankan separuh
+     * perintahnya.
+     */
+    const daftarPath = process.env["PATH"] ?? "";
+    for (const alat of ALAT_GO) {
+      jumlahPemeriksaan += 1;
+      if (!(await bisaDiresolusi(alat, daftarPath))) {
+        temuan.push(msg(pesan, "doctor.toolchain_go_hilang", { alat, jalur: jalurGoMod }));
+      }
     }
   }
 

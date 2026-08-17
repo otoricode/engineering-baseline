@@ -6,6 +6,7 @@
   "doctor.path_bukan_berkas": "{kunci} points to {jalur}, but it is not a file.",
   "doctor.path_tak_terbaca": "{kunci} points to {jalur}, but it could not be inspected: {sebab}.",
   "doctor.module_beda": "go.modulePath {config} does not match go.mod {nyata}.",
+  "doctor.toolchain_go_hilang": "{alat} cannot be resolved on PATH, yet {jalur} marks this project as using the Go layer. The consequence: `standard gen module`, `standard gen dto`, and `make gen-go` will exit 2 on this machine — not because the contract or your code is wrong, but because the tool could never run at all. Install the Go toolchain, then make sure {alat} is on PATH.",
   "doctor.namespace_contoh": "idempotency.uuidNamespace is still the example value. Mint this project's own namespace.",
   "doctor.sehat": "config is healthy: {jumlah} check(s) passed.",
   "doctor.workflow_tak_terurai": "{jalur} is not valid YAML, so its paths block was NOT checked: {sebab}",
