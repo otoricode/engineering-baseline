@@ -141,9 +141,32 @@ apa adanya — salin, ganti nilainya:
 | Perintah | Di proyek contract-only |
 |---|---|
 | `standard doctor` | hijau; jumlah pemeriksaannya **lebih kecil** — direktori backend, `go.mod`, dan toolchain Go tidak diperiksa karena tidak dinyatakan |
-| `standard gate --lapis contract` | hijau; `gate:backend-routes` **DILEWATI**, dan lewatannya dicetak di langkahnya **dan** di baris ringkasan |
+| `standard gate --lapis contract` | hijau; `gate:backend-routes` **DILEWATI**, dan lewatannya dicetak di langkahnya **dan** di baris ringkasan. **Ini bentuk yang kau pakai di proyek ini** |
+| `standard gate` (polos) | **keluar 2** di `tenancy-checklist` — langkah itu memindai direktori feature, dan tidak ada yang bisa dipindai. Kalimatnya menjelaskan diri, tapi jangan menaruhnya di CI: pakai `--lapis contract` |
+| `standard verify` | hijau, dan **tidak terpengaruh** — ia self-test PAKET, bukan pemeriksaan atas proyekmu; ia memakai proyek fixture-nya sendiri |
 | `standard gen common` | **berhasil** — katalog TypeScript dan `dist/openapi.shared.yaml` tetap ditulis; berkas Go-nya dilewati, dan pesannya **menyebut berkas apa yang tidak ditulis** |
 | `gen wiring`, `gen dto`, `gen module`, `gate --only tenancy-checklist` | **keluar 2** dengan kalimat yang menyebut config ini tidak menyatakan lapis backend |
+
+**Berkas seed itu harus kau BUAT.** `contract.permissionSeeds` di config atas menunjuk
+`db/seed/permissions.ts`, dan tidak ada langkah yang membuatnya untukmu — sama seperti keempat
+berkas schema bersama di §1.3. Tanpa berkasnya, `standard gate` keluar **2** dengan `ENOENT`
+telanjang, bukan kalimat yang menjelaskan diri. Bentuk yang dikenali pembacanya adalah **string
+literal ber-`code`**:
+
+<!-- berkas-contoh: db/seed/permissions.ts -->
+```ts
+// Sumber tempat baris permission DIBUAT. Boleh berupa apa pun yang proyekmu pakai — seeder,
+// migrasi, fixture — asalkan tiap kode muncul sebagai string literal di sebelah `code`.
+// Gate permission membacanya untuk membuktikan tiap entri katalog benar-benar bisa dipegang role.
+export const seedPermissions = [
+  { code: "CONTOH_READ" },
+  { code: "CONTOH_CREATE" },
+];
+```
+
+Isinya wajib memuat **setiap** nama di `permissions.yaml`; kalau tidak, gate menyebut nama yang
+kurang satu per satu. Katalog kosong = seed kosong = hijau, dan itu bentuk yang benar untuk hari
+pertama.
 
 **Yang TIDAK melonggar:** `layout.backendDir` yang ADA tapi salah ketik tetap **MERAH**. Sinyal
 "tidak ada lapis backend" adalah kuncinya **dihilangkan** — bukan direktorinya kebetulan tidak ada
@@ -267,6 +290,12 @@ allowlist kosong di §3: nol entri berarti nol yang bisa gagal, dan tiap entri m
 depan. `envelope.yaml` yang kosong TIDAK sah, karena `gen common` memancarkan schema bersama
 darinya.
 
+**Kalau proyekmu SUDAH punya kontrak**, "kosong" berhenti jadi bentuk yang benar: katalog permission
+wajib memuat setiap `x-permission` yang operasimu sebut, dan katalog error setiap kode yang
+responsmu pakai. Katalognya TERTUTUP — gate menolak kode yang dipakai tapi tak terdaftar, dan
+kalimatnya menyebut operasi mana yang menyebutnya. Templat di bawah adalah titik awal untuk proyek
+BARU; proyek yang sudah berjalan mengisinya dari kontraknya sendiri.
+
 ### 1.4 Jalankan `doctor` — dan baca apa yang WAJAR masih merah
 
 ```bash
@@ -317,6 +346,13 @@ cp <paket>/ci/frontend-gate.yml.template <proyek>/.github/workflows/frontend-gat
 cp <paket>/tooling/Makefile.template     <proyek>/Makefile      # atau gabungkan isinya
 ```
 
+> **Proyek contract-only: JANGAN salin `backend-gate.yml`.** Blok `paths:`-nya menunjuk
+> `{{BACKEND_DIR}}`, dan di proyek yang tidak punya direktori itu `standard doctor` langsung
+> **keluar 1** — `pola paths "apps/api/**" menunjuk apps/api yang tidak ada`. Itu bukan gate yang
+> salah: workflow yang `paths:`-nya menunjuk direktori tak ada memang tidak akan pernah terpicu, dan
+> `doctor` menolak merestuinya. Salin dua workflow saja (`contract-gate`, `frontend-gate`), dan isi
+> **lima** placeholder — `BACKEND_DIR` tidak dipakai satu pun di antaranya.
+
 Buang akhiran `.template` (sudah dilakukan di perintah di atas), lalu isi **keenam** placeholder.
 Tidak tiga — enam:
 
@@ -350,11 +386,26 @@ Sekarang isi buku besarnya, semuanya dengan daftar **kosong**:
 
 ```bash
 cd <proyek>/<contractDir>
-echo '{"tags":[]}'    > envelope-opt-in.json      # nama berkas dari ledgers.* di config-mu
-echo '{"modules":[]}' > mounted-modules.json
-echo '{"routes":[]}'  > routes.json
-echo '{"coverage":[]}'> coverage.json
+# Nama berkasnya dari `ledgers.*` di config-mu; BENTUKNYA yang di bawah ini mengikat.
+echo '{"tags":[]}' > envelope-opt-in.json
+cat > mounted-modules.json <<'JSON'
+{
+  "mount": {},
+  "optInBelumMount": {},
+  "belumOptIn": [],
+  "tergenerate": {},
+  "handWired": {}
+}
+JSON
+echo '{}' > routes.json
+echo '{}' > coverage.json
 ```
+
+**Kelima kunci `mounted-modules.json` wajib ada, walau semuanya kosong.** Ia bukan daftar tunggal
+melainkan buku besar dua arah: `mount` (modul yang memakai wiring generated), `optInBelumMount`
+(sudah opt-in tapi belum dipasang), `belumOptIn`, `tergenerate`, dan `handWired`. Buku besar yang
+kehilangan salah satunya ditolak saat DIMUAT — `gate:backend-routes` keluar 1 dengan
+`"mount" harus objek tag -> direktori feature`, dan itu kegagalan bentuk, bukan kegagalan isi.
 
 Kosong = **ketat sejak hari pertama tanpa memerahkan satu pun modul lama**. Gate opt-in hanya
 memeriksa nama yang terdaftar; nol nama berarti nol pemeriksaan yang bisa gagal, dan tiap modul
